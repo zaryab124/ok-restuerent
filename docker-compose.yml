@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  ok-restaurant-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ok_restaurant_platform
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+    restart: always
