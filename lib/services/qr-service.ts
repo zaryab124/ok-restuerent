@@ -1,9 +1,7 @@
 import { RestaurantTable } from '../types';
-import { INITIAL_TABLES, INITIAL_BRANCHES } from '../supabase/mock-db';
+import { supabase } from '../supabase/client';
 
 export class QRService {
-  private static tables: RestaurantTable[] = [...INITIAL_TABLES];
-
   static generateSecureToken(branchSlug: string, tableNumber: string): string {
     const randomHex = Array.from({ length: 8 }, () =>
       Math.floor(Math.random() * 16).toString(16)
@@ -13,46 +11,129 @@ export class QRService {
   }
 
   static async getTablesByBranch(branchId: string): Promise<RestaurantTable[]> {
-    return this.tables.filter((t) => t.branch_id === branchId && t.is_active);
+    if (!supabase) {
+      throw new Error('Supabase client is not configured.');
+    }
+
+    const { data, error } = await supabase
+      .from('tables')
+      .select('*')
+      .eq('branch_id', branchId)
+      .eq('is_active', true);
+
+    if (error) {
+      throw new Error(`Failed to fetch tables for branch (${branchId}): ${error.message}`);
+    }
+
+    return (data || []).map((t: any) => ({
+      id: t.id,
+      branch_id: t.branch_id,
+      table_number: t.table_number,
+      qr_code_token: t.qr_code_token,
+      is_active: Boolean(t.is_active),
+    }));
   }
 
   static async getTableByToken(
     token: string
   ): Promise<{ table: RestaurantTable; branchName: string; branchSlug: string } | null> {
-    const table = this.tables.find((t) => t.qr_code_token === token && t.is_active);
-    if (!table) return null;
-    const branch = INITIAL_BRANCHES.find((b) => b.id === table.branch_id);
-    if (!branch) return null;
+    if (!supabase) {
+      throw new Error('Supabase client is not configured.');
+    }
+
+    const { data, error } = await supabase.rpc('validate_qr_token', {
+      p_token: token,
+    });
+
+    if (error || !data || data.length === 0) return null;
+
+    const row = data[0];
+
+    const table: RestaurantTable = {
+      id: row.table_id,
+      branch_id: row.branch_id,
+      table_number: row.table_number,
+      qr_code_token: token,
+      is_active: true,
+    };
+
     return {
       table,
-      branchName: branch.name,
-      branchSlug: branch.slug,
+      branchName: row.branch_name,
+      branchSlug: row.branch_slug,
     };
   }
 
   static async createTable(branchId: string, tableNumber: string): Promise<RestaurantTable> {
-    const branch = INITIAL_BRANCHES.find((b) => b.id === branchId);
-    if (!branch) throw new Error('Branch not found');
+    if (!supabase) {
+      throw new Error('Supabase client is not configured.');
+    }
+
+    const { data: branch, error: branchError } = await supabase
+      .from('branches')
+      .select('slug')
+      .eq('id', branchId)
+      .maybeSingle();
+
+    if (branchError || !branch) {
+      throw new Error(`Branch not found for ID (${branchId}): ${branchError?.message || ''}`);
+    }
 
     const token = this.generateSecureToken(branch.slug, tableNumber);
-    const newTable: RestaurantTable = {
-      id: `t-${Date.now()}`,
-      branch_id: branchId,
-      table_number: tableNumber,
-      qr_code_token: token,
-      is_active: true,
+
+    const { data: newTable, error: createError } = await supabase
+      .from('tables')
+      .insert({
+        branch_id: branchId,
+        table_number: tableNumber,
+        qr_code_token: token,
+        is_active: true,
+      })
+      .select('*')
+      .single();
+
+    if (createError) {
+      throw new Error(`Failed to create restaurant table: ${createError.message}`);
+    }
+
+    return {
+      id: newTable.id,
+      branch_id: newTable.branch_id,
+      table_number: newTable.table_number,
+      qr_code_token: newTable.qr_code_token,
+      is_active: Boolean(newTable.is_active),
     };
-    this.tables.push(newTable);
-    return newTable;
   }
 
   static async regenerateToken(tableId: string): Promise<string> {
-    const table = this.tables.find((t) => t.id === tableId);
-    if (!table) throw new Error('Table not found');
+    if (!supabase) {
+      throw new Error('Supabase client is not configured.');
+    }
 
-    const branch = INITIAL_BRANCHES.find((b) => b.id === table.branch_id);
-    const newToken = this.generateSecureToken(branch ? branch.slug : 'ok', table.table_number);
-    table.qr_code_token = newToken;
+    const { data: table, error: tableError } = await supabase
+      .from('tables')
+      .select('*, branch:branches(slug)')
+      .eq('id', tableId)
+      .maybeSingle();
+
+    if (tableError || !table) {
+      throw new Error(`Table not found for ID (${tableId}): ${tableError?.message || ''}`);
+    }
+
+    const branch = Array.isArray(table.branch) ? table.branch[0] : table.branch;
+    const branchSlug = branch ? branch.slug : 'ok';
+
+    const newToken = this.generateSecureToken(branchSlug, table.table_number);
+
+    const { error: updateError } = await supabase
+      .from('tables')
+      .update({ qr_code_token: newToken })
+      .eq('id', tableId);
+
+    if (updateError) {
+      throw new Error(`Failed to regenerate table QR token: ${updateError.message}`);
+    }
+
     return newToken;
   }
 }

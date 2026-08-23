@@ -118,6 +118,7 @@ export interface OrderStatusHistory {
 export interface Order {
   id: string;
   order_number: string;
+  tracking_token?: string;
   branch_id: string;
   customer_id?: string;
   customer_name: string;

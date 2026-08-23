@@ -105,7 +105,7 @@ CREATE TABLE IF NOT EXISTS orders (
     subtotal NUMERIC(10, 2) NOT NULL,
     delivery_fee NUMERIC(10, 2) DEFAULT 0.00,
     total_amount NUMERIC(10, 2) NOT NULL,
-    payment_method TEXT NOT NULL DEFAULT 'CASH' CHECK (payment_method IN ('CASH', 'ONLINE', 'TEST_PAYMENT')),
+    payment_method TEXT NOT NULL DEFAULT 'CASH' CHECK (payment_method IN ('CASH', 'JAZZCASH', 'EASYPAISA', 'CARD', 'ONLINE', 'TEST_PAYMENT')),
     payment_status TEXT NOT NULL DEFAULT 'PENDING' CHECK (payment_status IN ('PENDING', 'PAID', 'FAILED')),
     status TEXT NOT NULL DEFAULT 'PENDING' CHECK (
         status IN (
@@ -152,7 +152,52 @@ CREATE TABLE IF NOT EXISTS rider_assignments (
     status TEXT NOT NULL DEFAULT 'ACCEPTED' CHECK (status IN ('ACCEPTED', 'REJECTED', 'COMPLETED', 'FAILED'))
 );
 
--- 13. Audit Logs
+-- 13. Buffet Registrations
+CREATE TABLE IF NOT EXISTS buffet_registrations (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    branch_id UUID REFERENCES branches(id) ON DELETE CASCADE NOT NULL,
+    title TEXT NOT NULL,
+    description TEXT NOT NULL,
+    dishes_list TEXT[] NOT NULL,
+    price_per_head NUMERIC(10, 2) NOT NULL,
+    event_date TEXT NOT NULL,
+    start_time TEXT NOT NULL,
+    end_time TEXT NOT NULL,
+    banner_image_url TEXT,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 14. Buffet Bookings
+CREATE TABLE IF NOT EXISTS buffet_bookings (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    buffet_id UUID REFERENCES buffet_registrations(id) ON DELETE CASCADE NOT NULL,
+    customer_name TEXT NOT NULL,
+    customer_phone TEXT NOT NULL,
+    customer_email TEXT,
+    guests_count INT NOT NULL CHECK (guests_count > 0),
+    total_amount NUMERIC(10, 2) NOT NULL,
+    qr_ticket_token TEXT UNIQUE NOT NULL,
+    status TEXT NOT NULL DEFAULT 'CONFIRMED' CHECK (status IN ('CONFIRMED', 'CHECKED_IN', 'CANCELLED')),
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 15. Merchant Bank Configuration
+CREATE TABLE IF NOT EXISTS merchant_bank_config (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    bank_name TEXT NOT NULL DEFAULT 'Meezan Bank Limited',
+    account_title TEXT NOT NULL DEFAULT 'OK RESTAURANT JAMPUR',
+    account_number TEXT NOT NULL DEFAULT '01020304050607',
+    iban TEXT NOT NULL DEFAULT 'PK42 MEZN 0001 0203 0405 0607',
+    jazzcash_till_number TEXT NOT NULL DEFAULT '0334-4683344',
+    jazzcash_account_name TEXT NOT NULL DEFAULT 'OK Restaurant Jampur',
+    easypaisa_till_number TEXT NOT NULL DEFAULT '0336-4683344',
+    easypaisa_account_name TEXT NOT NULL DEFAULT 'OK Restaurant Jampur',
+    is_online_payment_active BOOLEAN DEFAULT TRUE,
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 16. Audit Logs
 CREATE TABLE IF NOT EXISTS audit_logs (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID REFERENCES profiles(id) ON DELETE SET NULL,
@@ -169,6 +214,7 @@ CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);
 CREATE INDEX IF NOT EXISTS idx_orders_created_at ON orders(created_at);
 CREATE INDEX IF NOT EXISTS idx_orders_customer_id ON orders(customer_id);
 CREATE INDEX IF NOT EXISTS idx_tables_qr_token ON tables(qr_code_token);
+CREATE INDEX IF NOT EXISTS idx_buffet_bookings_qr_token ON buffet_bookings(qr_ticket_token);
 
 -- Concurrency-safe rider claiming function
 CREATE OR REPLACE FUNCTION claim_delivery_order(

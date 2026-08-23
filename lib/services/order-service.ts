@@ -1,36 +1,11 @@
 import { Order, OrderStatus, OrderType, CartItem, PaymentMethod } from '../types';
-import { INITIAL_ORDERS } from '../supabase/mock-db';
-import { BranchService } from './branch-service';
+import { supabase } from '../supabase/client';
 import { PaymentService } from './payment-service';
 
 type OrderListener = (order: Order) => void;
 
 export class OrderService {
   private static listeners: Set<OrderListener> = new Set();
-  private static inMemoryOrders: Order[] = [...INITIAL_ORDERS];
-
-  private static getStoredOrders(): Order[] {
-    if (typeof window === 'undefined') return this.inMemoryOrders;
-    const stored = localStorage.getItem('ok_orders_history');
-    if (!stored) {
-      localStorage.setItem('ok_orders_history', JSON.stringify(this.inMemoryOrders));
-      return this.inMemoryOrders;
-    }
-    try {
-      const parsed = JSON.parse(stored);
-      this.inMemoryOrders = parsed;
-      return parsed;
-    } catch {
-      return this.inMemoryOrders;
-    }
-  }
-
-  private static saveStoredOrders(orders: Order[]): void {
-    this.inMemoryOrders = orders;
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('ok_orders_history', JSON.stringify(orders));
-    }
-  }
 
   static subscribe(listener: OrderListener): () => void {
     this.listeners.add(listener);
@@ -81,64 +56,76 @@ export class OrderService {
     paymentMethod: PaymentMethod;
     customerId?: string;
   }): Promise<Order> {
-    const { branchId, customerName, customerPhone, orderType, tableId, deliveryAddress, deliveryNotes, items, paymentMethod, customerId } = params;
+    if (!supabase) {
+      throw new Error('Supabase client is not configured.');
+    }
+
+    const { branchId, customerName, customerPhone, orderType, tableId, deliveryAddress, deliveryNotes, items, paymentMethod } = params;
 
     if (items.length === 0) {
       throw new Error('Cannot create an order with an empty cart.');
     }
 
-    if (orderType === 'DELIVERY') {
-      const deliveryAllowed = BranchService.isDeliveryAllowed(branchId);
-      if (!deliveryAllowed) {
-        throw new Error('Delivery is currently unavailable at this branch. Please select takeaway or dining in.');
-      }
-      if (!deliveryAddress || deliveryAddress.trim() === '') {
-        throw new Error('Delivery address is required for delivery orders.');
-      }
-    }
+    // Format items payload for create_order_atomic RPC
+    const itemsPayload = items.map((i) => ({
+      menu_item_id: i.menuItem.id,
+      variant_id: i.variant?.id || null,
+      quantity: i.quantity,
+      special_instructions: i.specialInstructions || null,
+    }));
 
-    if (orderType === 'DINE_IN' && !tableId) {
-      throw new Error('Table number is required for Dine-In orders.');
-    }
-
-    const subtotal = items.reduce((sum, item) => {
-      const unitPrice = item.variant ? item.variant.price : item.menuItem.base_price;
-      return sum + unitPrice * item.quantity;
-    }, 0);
-
-    const deliveryFee = orderType === 'DELIVERY' ? 100 : 0;
-    const totalAmount = subtotal + deliveryFee;
-
-    const paymentResult = await PaymentService.processPayment(totalAmount, paymentMethod, {
-      name: customerName,
-      phone: customerPhone,
+    const { data, error } = await supabase.rpc('create_order_atomic', {
+      p_branch_id: branchId,
+      p_customer_name: customerName,
+      p_customer_phone: customerPhone,
+      p_order_type: orderType,
+      p_table_id: tableId || null,
+      p_delivery_address: deliveryAddress || null,
+      p_delivery_notes: deliveryNotes || null,
+      p_payment_method: paymentMethod,
+      p_items: itemsPayload,
     });
 
-    const orderNumber = `OK-${Math.floor(1000 + Math.random() * 9000)}`;
-    const newOrderId = `ord-${Date.now()}`;
+    if (error) {
+      throw new Error(`Order placement failed: ${error.message}`);
+    }
 
-    const newOrder: Order = {
-      id: newOrderId,
-      order_number: orderNumber,
+    const createdRecord = Array.isArray(data) ? data[0] : data;
+
+    if (!createdRecord) {
+      throw new Error('Order creation failed to return order details.');
+    }
+
+    // Process payment gateway if needed
+    const paymentResult = await PaymentService.processPayment(
+      Number(createdRecord.total_amount || createdRecord.out_total_amount),
+      paymentMethod,
+      { name: customerName, phone: customerPhone }
+    );
+
+    const fullOrder: Order = {
+      id: createdRecord.order_id || createdRecord.out_order_id,
+      order_number: createdRecord.order_number || createdRecord.out_order_number,
+      tracking_token: createdRecord.tracking_token || createdRecord.out_tracking_token,
       branch_id: branchId,
-      customer_id: customerId,
+      customer_id: params.customerId,
       customer_name: customerName,
       customer_phone: customerPhone,
       order_type: orderType,
       table_id: tableId,
       delivery_address: deliveryAddress,
       delivery_notes: deliveryNotes,
-      subtotal,
-      delivery_fee: deliveryFee,
-      total_amount: totalAmount,
+      subtotal: items.reduce((sum, i) => sum + (i.variant ? i.variant.price : i.menuItem.base_price) * i.quantity, 0),
+      delivery_fee: orderType === 'DELIVERY' ? 100 : 0,
+      total_amount: Number(createdRecord.total_amount),
       payment_method: paymentMethod,
       payment_status: paymentResult.paymentStatus,
       status: 'PENDING',
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
       items: items.map((item, idx) => ({
-        id: `oi-${Date.now()}-${idx}`,
-        order_id: newOrderId,
+        id: `oi-${createdRecord.order_id}-${idx}`,
+        order_id: createdRecord.order_id,
         menu_item_id: item.menuItem.id,
         variant_id: item.variant?.id,
         item_name: item.menuItem.name,
@@ -150,8 +137,8 @@ export class OrderService {
       })),
       history: [
         {
-          id: `hist-${Date.now()}`,
-          order_id: newOrderId,
+          id: `hist-${createdRecord.order_id}`,
+          order_id: createdRecord.order_id,
           to_status: 'PENDING',
           notes: 'Order placed by customer',
           created_at: new Date().toISOString(),
@@ -159,35 +146,217 @@ export class OrderService {
       ],
     };
 
-    const orders = this.getStoredOrders();
-    orders.unshift(newOrder);
-    this.saveStoredOrders(orders);
-
-    this.notify(newOrder);
-    return newOrder;
+    this.notify(fullOrder);
+    return fullOrder;
   }
 
   static async getOrders(filter?: { branchId?: string; status?: OrderStatus; riderId?: string; customerPhone?: string }): Promise<Order[]> {
-    let result = this.getStoredOrders();
+    if (!supabase) {
+      throw new Error('Supabase client is not configured.');
+    }
+
+    let query = supabase
+      .from('orders')
+      .select('*, items:order_items(*), history:order_status_history(*), rider_assignment:rider_assignments(*)')
+      .order('created_at', { ascending: false });
+
     if (filter?.branchId) {
-      result = result.filter((o) => o.branch_id === filter.branchId);
+      query = query.eq('branch_id', filter.branchId);
     }
     if (filter?.status) {
-      result = result.filter((o) => o.status === filter.status);
-    }
-    if (filter?.riderId) {
-      result = result.filter((o) => o.rider_assignment?.rider_id === filter.riderId);
+      query = query.eq('status', filter.status);
     }
     if (filter?.customerPhone) {
-      result = result.filter((o) => o.customer_phone === filter.customerPhone);
+      query = query.eq('customer_phone', filter.customerPhone);
     }
-    return result;
+
+    const { data, error } = await query;
+
+    if (error) {
+      throw new Error(`Failed to fetch orders: ${error.message}`);
+    }
+
+    return (data || []).map((o: any) => {
+      const rawAssignment = Array.isArray(o.rider_assignment) ? o.rider_assignment[0] : o.rider_assignment;
+      return {
+        id: o.id,
+        order_number: o.order_number,
+        tracking_token: o.tracking_token,
+        branch_id: o.branch_id,
+        customer_id: o.customer_id || undefined,
+        customer_name: o.customer_name,
+        customer_phone: o.customer_phone,
+        order_type: o.order_type,
+        table_id: o.table_id || undefined,
+        delivery_address: o.delivery_address || undefined,
+        delivery_notes: o.delivery_notes || undefined,
+        subtotal: Number(o.subtotal),
+        delivery_fee: Number(o.delivery_fee || 0),
+        total_amount: Number(o.total_amount),
+        payment_method: o.payment_method,
+        payment_status: o.payment_status,
+        status: o.status,
+        created_at: o.created_at,
+        updated_at: o.updated_at,
+        items: (o.items || []).map((i: any) => ({
+          id: i.id,
+          order_id: i.order_id,
+          menu_item_id: i.menu_item_id,
+          variant_id: i.variant_id || undefined,
+          item_name: i.item_name,
+          variant_name: i.variant_name || undefined,
+          unit_price: Number(i.unit_price),
+          quantity: i.quantity,
+          subtotal_price: Number(i.subtotal_price),
+          special_instructions: i.special_instructions || undefined,
+        })),
+        history: (o.history || []).map((h: any) => ({
+          id: h.id,
+          order_id: h.order_id,
+          from_status: h.from_status || undefined,
+          to_status: h.to_status,
+          changed_by_user_id: h.changed_by_user_id || undefined,
+          notes: h.notes || undefined,
+          created_at: h.created_at,
+        })),
+        rider_assignment: rawAssignment
+          ? {
+              rider_id: rawAssignment.rider_id,
+              rider_name: 'Rider',
+              assigned_at: rawAssignment.assigned_at,
+            }
+          : undefined,
+      };
+    });
   }
 
   static async getOrderById(id: string): Promise<Order | null> {
-    const orders = this.getStoredOrders();
-    const o = orders.find((o) => o.id === id || o.order_number === id);
-    return o || null;
+    if (!supabase) {
+      throw new Error('Supabase client is not configured.');
+    }
+
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+
+    let query = supabase
+      .from('orders')
+      .select('*, items:order_items(*), history:order_status_history(*), rider_assignment:rider_assignments(*)');
+
+    if (isUuid) {
+      query = query.or(`id.eq.${id},tracking_token.eq.${id}`);
+    } else {
+      query = query.eq('order_number', id);
+    }
+
+    const { data, error } = await query.maybeSingle();
+
+    if (error || !data) return null;
+
+    const rawAssignment = Array.isArray(data.rider_assignment) ? data.rider_assignment[0] : data.rider_assignment;
+
+    return {
+      id: data.id,
+      order_number: data.order_number,
+      tracking_token: data.tracking_token,
+      branch_id: data.branch_id,
+      customer_id: data.customer_id || undefined,
+      customer_name: data.customer_name,
+      customer_phone: data.customer_phone,
+      order_type: data.order_type,
+      table_id: data.table_id || undefined,
+      delivery_address: data.delivery_address || undefined,
+      delivery_notes: data.delivery_notes || undefined,
+      subtotal: Number(data.subtotal),
+      delivery_fee: Number(data.delivery_fee || 0),
+      total_amount: Number(data.total_amount),
+      payment_method: data.payment_method,
+      payment_status: data.payment_status,
+      status: data.status,
+      created_at: data.created_at,
+      updated_at: data.updated_at,
+      items: (data.items || []).map((i: any) => ({
+        id: i.id,
+        order_id: i.order_id,
+        menu_item_id: i.menu_item_id,
+        variant_id: i.variant_id || undefined,
+        item_name: i.item_name,
+        variant_name: i.variant_name || undefined,
+        unit_price: Number(i.unit_price),
+        quantity: i.quantity,
+        subtotal_price: Number(i.subtotal_price),
+        special_instructions: i.special_instructions || undefined,
+      })),
+      history: (data.history || []).map((h: any) => ({
+        id: h.id,
+        order_id: h.order_id,
+        from_status: h.from_status || undefined,
+        to_status: h.to_status,
+        changed_by_user_id: h.changed_by_user_id || undefined,
+        notes: h.notes || undefined,
+        created_at: h.created_at,
+      })),
+      rider_assignment: rawAssignment
+        ? {
+            rider_id: rawAssignment.rider_id,
+            rider_name: 'Rider',
+            assigned_at: rawAssignment.assigned_at,
+          }
+        : undefined,
+    };
+  }
+
+  static async getOrderByTrackingToken(trackingToken: string): Promise<Order | null> {
+    if (!supabase) {
+      throw new Error('Supabase client is not configured.');
+    }
+
+    const { data, error } = await supabase.rpc('get_order_by_tracking_token', {
+      p_tracking_token: trackingToken,
+    });
+
+    if (error || !data || data.length === 0) return null;
+
+    const row = data[0];
+
+    return {
+      id: row.order_id,
+      order_number: row.order_number,
+      tracking_token: row.tracking_token,
+      branch_id: row.branch_id,
+      customer_name: row.customer_name,
+      customer_phone: row.customer_phone,
+      order_type: row.order_type,
+      table_id: row.table_id || undefined,
+      delivery_address: row.delivery_address || undefined,
+      delivery_notes: row.delivery_notes || undefined,
+      subtotal: Number(row.subtotal),
+      delivery_fee: Number(row.delivery_fee || 0),
+      total_amount: Number(row.total_amount),
+      payment_method: row.payment_method,
+      payment_status: row.payment_status,
+      status: row.status,
+      created_at: row.created_at,
+      updated_at: row.created_at,
+      items: (row.items || []).map((i: any) => ({
+        id: i.id,
+        order_id: row.order_id,
+        menu_item_id: i.menu_item_id,
+        variant_id: i.variant_id || undefined,
+        item_name: i.item_name,
+        variant_name: i.variant_name || undefined,
+        unit_price: Number(i.unit_price),
+        quantity: i.quantity,
+        subtotal_price: Number(i.subtotal_price),
+        special_instructions: i.special_instructions || undefined,
+      })),
+      history: (row.history || []).map((h: any) => ({
+        id: h.id,
+        order_id: row.order_id,
+        from_status: h.from_status || undefined,
+        to_status: h.to_status,
+        notes: h.notes || undefined,
+        created_at: h.created_at,
+      })),
+    };
   }
 
   static async updateOrderStatus(
@@ -196,51 +365,48 @@ export class OrderService {
     userId?: string,
     notes?: string
   ): Promise<Order> {
-    const orders = this.getStoredOrders();
-    const order = orders.find((o) => o.id === orderId);
-    if (!order) throw new Error('Order not found');
-
-    if (!this.isValidTransition(order.status, newStatus)) {
-      throw new Error(`Invalid status transition from ${order.status} to ${newStatus}`);
+    if (!supabase) {
+      throw new Error('Supabase client is not configured.');
     }
 
-    const prevStatus = order.status;
-    order.status = newStatus;
-    order.updated_at = new Date().toISOString();
-
-    if (!order.history) order.history = [];
-    order.history.push({
-      id: `hist-${Date.now()}`,
-      order_id: orderId,
-      from_status: prevStatus,
-      to_status: newStatus,
-      changed_by_user_id: userId,
-      notes: notes || `Status updated to ${newStatus}`,
-      created_at: new Date().toISOString(),
+    const { error } = await supabase.rpc('update_order_status_secure', {
+      p_order_id: orderId,
+      p_new_status: newStatus,
+      p_notes: notes || null,
     });
 
-    this.saveStoredOrders(orders);
-    this.notify(order);
-    return order;
+    if (error) {
+      throw new Error(`Failed to update order status: ${error.message}`);
+    }
+
+    const updated = await this.getOrderById(orderId);
+    if (!updated) {
+      throw new Error('Order not found after status update.');
+    }
+
+    this.notify(updated);
+    return updated;
   }
 
   static async claimOrderForRider(orderId: string, riderId: string, riderName: string): Promise<boolean> {
-    const orders = this.getStoredOrders();
-    const order = orders.find((o) => o.id === orderId);
-    if (!order) return false;
+    if (!supabase) {
+      throw new Error('Supabase client is not configured.');
+    }
 
-    if (order.status !== 'READY' || order.rider_assignment) {
+    const { data, error } = await supabase.rpc('claim_delivery_order', {
+      p_order_id: orderId,
+      p_rider_id: riderId,
+    });
+
+    if (error || !data) {
       return false;
     }
 
-    order.rider_assignment = {
-      rider_id: riderId,
-      rider_name: riderName,
-      assigned_at: new Date().toISOString(),
-    };
+    const updated = await this.getOrderById(orderId);
+    if (updated) {
+      this.notify(updated);
+    }
 
-    this.saveStoredOrders(orders);
-    await this.updateOrderStatus(orderId, 'ASSIGNED', riderId, `Claimed by rider ${riderName}`);
     return true;
   }
 }

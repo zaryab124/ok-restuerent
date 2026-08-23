@@ -1,52 +1,75 @@
 import { BuffetRegistration, BuffetBooking } from '../types';
+import { supabase } from '../supabase/client';
 
 export class BuffetService {
-  private static buffets: BuffetRegistration[] = [
-    {
-      id: 'buff-1',
-      branch_id: 'b1000000-0000-0000-0000-000000000001',
-      title: 'Grand Weekend Royal Buffet',
-      description: 'Unlimited 40+ dishes including Chicken Karahi, Mutton Handi, BBQ Malai Boti, Seekh Kabab, Biryani, Chinese Starters, Fresh Naan, Desserts & Unlimited Drinks!',
-      dishes_list: [
-        'OK Special Afghani Karahi',
-        'Chicken White Karahi',
-        'Mutton Handi',
-        'Malai Boti BBQ',
-        'Seekh Kabab',
-        'Chicken Biryani',
-        'Chicken Chowmain',
-        'Chicken Hot & Sour Soup',
-        'Garlic Naan & Fresh Roti',
-        'Special Ice Cream & Badami Chai',
-      ],
-      price_per_head: 1850,
-      event_date: 'Every Saturday & Sunday',
-      start_time: '07:00 PM',
-      end_time: '11:00 PM',
-      banner_image_url: 'https://images.unsplash.com/photo-1555939594-58d7cb561ad1?w=800&auto=format&fit=crop&q=80',
-      is_active: true,
-      created_at: new Date().toISOString(),
-    },
-  ];
-
-  private static bookings: BuffetBooking[] = [];
-
   static async getActiveBuffets(branchId?: string): Promise<BuffetRegistration[]> {
-    let result = this.buffets.filter((b) => b.is_active);
+    if (!supabase) return [];
+
+    let query = supabase
+      .from('buffet_registrations')
+      .select('*')
+      .eq('is_active', true)
+      .order('created_at', { ascending: false });
+
     if (branchId) {
-      result = result.filter((b) => b.branch_id === branchId);
+      query = query.eq('branch_id', branchId);
     }
-    return result;
+
+    const { data, error } = await query;
+    if (error) throw new Error(`Failed to fetch buffets: ${error.message}`);
+
+    return (data || []).map((b: any) => ({
+      id: b.id,
+      branch_id: b.branch_id,
+      title: b.title,
+      description: b.description,
+      dishes_list: b.dishes_list || [],
+      price_per_head: Number(b.price_per_head),
+      event_date: b.event_date,
+      start_time: b.start_time,
+      end_time: b.end_time,
+      banner_image_url: b.banner_image_url || undefined,
+      is_active: Boolean(b.is_active),
+      created_at: b.created_at,
+    }));
   }
 
   static async createBuffet(params: Omit<BuffetRegistration, 'id' | 'created_at'>): Promise<BuffetRegistration> {
-    const newBuffet: BuffetRegistration = {
-      ...params,
-      id: `buff-${Date.now()}`,
-      created_at: new Date().toISOString(),
+    if (!supabase) throw new Error('Supabase client is not configured.');
+
+    const { data, error } = await supabase
+      .from('buffet_registrations')
+      .insert({
+        branch_id: params.branch_id,
+        title: params.title,
+        description: params.description,
+        dishes_list: params.dishes_list,
+        price_per_head: params.price_per_head,
+        event_date: params.event_date,
+        start_time: params.start_time,
+        end_time: params.end_time,
+        banner_image_url: params.banner_image_url,
+        is_active: params.is_active ?? true,
+      })
+      .select('*')
+      .single();
+
+    if (error) throw new Error(`Failed to create buffet: ${error.message}`);
+
+    return {
+      id: data.id,
+      branch_id: data.branch_id,
+      title: data.title,
+      description: data.description,
+      dishes_list: data.dishes_list || [],
+      price_per_head: Number(data.price_per_head),
+      event_date: data.event_date,
+      start_time: data.start_time,
+      end_time: data.end_time,
+      banner_image_url: data.banner_image_url || undefined,
+      is_active: Boolean(data.is_active),
+      created_at: data.created_at,
     };
-    this.buffets.push(newBuffet);
-    return newBuffet;
   }
 
   static async bookBuffetTicket(params: {
@@ -57,36 +80,105 @@ export class BuffetService {
     guestsCount: number;
     totalAmount: number;
   }): Promise<BuffetBooking> {
-    const token = `buffet_qr_${Date.now()}_${Math.floor(1000 + Math.random() * 9000)}`;
-    const booking: BuffetBooking = {
-      id: `book-${Date.now()}`,
-      buffet_id: params.buffetId,
-      customer_name: params.customerName,
-      customer_phone: params.customerPhone,
-      customer_email: params.customerEmail,
-      guests_count: params.guestsCount,
-      total_amount: params.totalAmount,
-      qr_ticket_token: token,
-      status: 'CONFIRMED',
-      created_at: new Date().toISOString(),
-    };
+    if (!supabase) throw new Error('Supabase client is not configured.');
 
-    this.bookings.unshift(booking);
-    return booking;
+    const randomHex = Array.from({ length: 8 }, () =>
+      Math.floor(Math.random() * 16).toString(16)
+    ).join('');
+    const token = `buffet_qr_${Date.now()}_${randomHex}`;
+
+    const { data, error } = await supabase
+      .from('buffet_bookings')
+      .insert({
+        buffet_id: params.buffetId,
+        customer_name: params.customerName,
+        customer_phone: params.customerPhone,
+        customer_email: params.customerEmail || null,
+        guests_count: params.guestsCount,
+        total_amount: params.totalAmount,
+        qr_ticket_token: token,
+        status: 'CONFIRMED',
+      })
+      .select('*')
+      .single();
+
+    if (error) throw new Error(`Failed to book buffet ticket: ${error.message}`);
+
+    return {
+      id: data.id,
+      buffet_id: data.buffet_id,
+      customer_name: data.customer_name,
+      customer_phone: data.customer_phone,
+      customer_email: data.customer_email || undefined,
+      guests_count: data.guests_count,
+      total_amount: Number(data.total_amount),
+      qr_ticket_token: data.qr_ticket_token,
+      status: data.status,
+      created_at: data.created_at,
+    };
   }
 
   static async getBookingByToken(token: string): Promise<BuffetBooking | null> {
-    return this.bookings.find((b) => b.qr_ticket_token === token) || null;
+    if (!supabase) return null;
+
+    const { data, error } = await supabase
+      .from('buffet_bookings')
+      .select('*')
+      .eq('qr_ticket_token', token)
+      .maybeSingle();
+
+    if (error || !data) return null;
+
+    return {
+      id: data.id,
+      buffet_id: data.buffet_id,
+      customer_name: data.customer_name,
+      customer_phone: data.customer_phone,
+      customer_email: data.customer_email || undefined,
+      guests_count: data.guests_count,
+      total_amount: Number(data.total_amount),
+      qr_ticket_token: data.qr_ticket_token,
+      status: data.status,
+      created_at: data.created_at,
+    };
   }
 
   static async getBookingsForBuffet(buffetId: string): Promise<BuffetBooking[]> {
-    return this.bookings.filter((b) => b.buffet_id === buffetId);
+    if (!supabase) return [];
+
+    const { data, error } = await supabase
+      .from('buffet_bookings')
+      .select('*')
+      .eq('buffet_id', buffetId)
+      .order('created_at', { ascending: false });
+
+    if (error) throw new Error(`Failed to fetch bookings: ${error.message}`);
+
+    return (data || []).map((b: any) => ({
+      id: b.id,
+      buffet_id: b.buffet_id,
+      customer_name: b.customer_name,
+      customer_phone: b.customer_phone,
+      customer_email: b.customer_email || undefined,
+      guests_count: b.guests_count,
+      total_amount: Number(b.total_amount),
+      qr_ticket_token: b.qr_ticket_token,
+      status: b.status,
+      created_at: b.created_at,
+    }));
   }
 
   static async checkInBooking(token: string): Promise<boolean> {
-    const booking = this.bookings.find((b) => b.qr_ticket_token === token);
-    if (!booking) return false;
-    booking.status = 'CHECKED_IN';
+    if (!supabase) throw new Error('Supabase client is not configured.');
+
+    const { data, error } = await supabase
+      .from('buffet_bookings')
+      .update({ status: 'CHECKED_IN' })
+      .eq('qr_ticket_token', token)
+      .select('*')
+      .maybeSingle();
+
+    if (error || !data) return false;
     return true;
   }
 }
