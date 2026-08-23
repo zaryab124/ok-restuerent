@@ -3,18 +3,18 @@ import { OrderService } from '../../lib/services/order-service';
 
 describe('Branch Capability & Delivery Validation Tests', () => {
 
-  test('Dera Chungi supports delivery', () => {
-    const isAllowed = BranchService.isDeliveryAllowed('b1000000-0000-0000-0000-000000000001');
+  test('Dera Chungi supports delivery', async () => {
+    const isAllowed = await BranchService.isDeliveryAllowed('b1000000-0000-0000-0000-000000000001');
     expect(isAllowed).toBe(true);
   });
 
-  test('Sherifalon Bypass Road rejects delivery', () => {
-    const isAllowed = BranchService.isDeliveryAllowed('b2000000-0000-0000-0000-000000000002');
+  test('Sherifalon Bypass Road rejects delivery', async () => {
+    const isAllowed = await BranchService.isDeliveryAllowed('b2000000-0000-0000-0000-000000000002');
     expect(isAllowed).toBe(false);
   });
 
-  test('Kot Chuta rejects delivery', () => {
-    const isAllowed = BranchService.isDeliveryAllowed('b3000000-0000-0000-0000-000000000003');
+  test('Kot Chuta rejects delivery', async () => {
+    const isAllowed = await BranchService.isDeliveryAllowed('b3000000-0000-0000-0000-000000000003');
     expect(isAllowed).toBe(false);
   });
 
@@ -29,10 +29,10 @@ describe('Branch Capability & Delivery Validation Tests', () => {
         items: [
           {
             menuItem: {
-              id: 'm111',
-              category_id: 'c2',
+              id: 'd3000000-0000-0000-0000-000000000001',
+              category_id: 'c1000000-0000-0000-0000-000000000003',
               name: 'Zinger Burger',
-              base_price: 350,
+              base_price: 320,
               has_variants: false,
               is_available: true,
               sort_order: 1,
@@ -42,7 +42,7 @@ describe('Branch Capability & Delivery Validation Tests', () => {
         ],
         paymentMethod: 'CASH',
       })
-    ).rejects.toThrow('Delivery is currently unavailable at this branch');
+    ).rejects.toThrow('Delivery service is currently disabled for this branch');
   });
 
 });
