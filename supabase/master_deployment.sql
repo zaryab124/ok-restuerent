@@ -226,11 +226,13 @@ CREATE INDEX IF NOT EXISTS idx_orders_tracking_token ON orders(tracking_token);
 -- 2. HELPER FUNCTIONS & RPCS
 -- ----------------------------------------------------------------------------
 
+DROP FUNCTION IF EXISTS get_user_role(UUID);
 CREATE OR REPLACE FUNCTION get_user_role(p_user_id UUID DEFAULT auth.uid())
 RETURNS TEXT LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public, pg_temp AS $$
     SELECT role FROM profiles WHERE id = p_user_id;
 $$;
 
+DROP FUNCTION IF EXISTS is_owner(UUID);
 CREATE OR REPLACE FUNCTION is_owner(p_user_id UUID DEFAULT auth.uid())
 RETURNS BOOLEAN LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public, pg_temp AS $$
     SELECT EXISTS (SELECT 1 FROM profiles WHERE id = p_user_id AND role = 'OWNER');
@@ -430,6 +432,7 @@ $$;
 GRANT EXECUTE ON FUNCTION create_order_atomic(UUID, TEXT, TEXT, TEXT, UUID, TEXT, TEXT, TEXT, JSONB) TO anon, authenticated;
 
 -- Claim Delivery Order Function
+DROP FUNCTION IF EXISTS claim_delivery_order(UUID, UUID);
 CREATE OR REPLACE FUNCTION claim_delivery_order(
     p_order_id UUID,
     p_rider_id UUID
