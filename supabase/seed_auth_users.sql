@@ -1,4 +1,4 @@
--- Seed All Staff & Demo Accounts Directly into Supabase Auth with Password 'okaykarubas12390'
+-- Fix GoTrue Auth Users & Identities Schema for Supabase Cloud
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
 DO $$
@@ -24,6 +24,10 @@ DECLARE
 BEGIN
     FOR v_user IN SELECT * FROM jsonb_to_recordset(v_users) AS x(id UUID, email TEXT, name TEXT, phone TEXT, role TEXT)
     LOOP
+        -- Clean existing invalid identity records for this user if any
+        DELETE FROM auth.identities WHERE user_id = v_user.id OR provider_id = v_user.id::text OR provider_id = LOWER(v_user.email);
+
+        -- Insert or Update into auth.users
         INSERT INTO auth.users (
             instance_id, id, aud, role, email, encrypted_password, email_confirmed_at,
             raw_app_meta_data, raw_user_meta_data, created_at, updated_at
@@ -40,17 +44,16 @@ BEGIN
             email_confirmed_at = NOW(),
             updated_at = NOW();
 
+        -- Insert into auth.identities with provider_id = user_id::text
         INSERT INTO auth.identities (
             id, user_id, identity_data, provider, provider_id, last_sign_in_at, created_at, updated_at
         ) VALUES (
             v_user.id, v_user.id,
             jsonb_build_object('sub', v_user.id::text, 'email', LOWER(v_user.email)),
-            'email', LOWER(v_user.email), NOW(), NOW(), NOW()
-        )
-        ON CONFLICT (provider, provider_id) DO UPDATE SET
-            identity_data = jsonb_build_object('sub', v_user.id::text, 'email', LOWER(v_user.email)),
-            updated_at = NOW();
+            'email', v_user.id::text, NOW(), NOW(), NOW()
+        );
 
+        -- Sync public.profiles
         INSERT INTO public.profiles (id, email, full_name, phone, role)
         VALUES (v_user.id, LOWER(v_user.email), v_user.name, v_user.phone, v_user.role)
         ON CONFLICT (id) DO UPDATE SET

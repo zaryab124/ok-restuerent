@@ -24,7 +24,7 @@ describe('Order State Machine & Concurrency Unit Tests', () => {
       customerPhone: '0300-0000000',
       orderType: 'DELIVERY',
       deliveryAddress: 'Test Address',
-      items: [{ menuItem: { id: 'm1', category_id: 'c1', name: 'Test Item', base_price: 500, has_variants: false, is_available: true, sort_order: 1 }, quantity: 1 }],
+      items: [{ menuItem: { id: 'd1000000-0000-0000-0000-000000000001', category_id: 'c1000000-0000-0000-0000-000000000001', name: 'June Deal!', base_price: 1495, has_variants: false, is_available: true, sort_order: 1 }, quantity: 1 }],
       paymentMethod: 'CASH',
     });
 

@@ -1,6 +1,7 @@
 import { Order, OrderStatus, OrderType, CartItem, PaymentMethod } from '../types';
 import { supabase } from '../supabase/client';
 import { PaymentService } from './payment-service';
+import { BranchService } from './branch-service';
 
 type OrderListener = (order: Order) => void;
 
@@ -64,6 +65,13 @@ export class OrderService {
 
     if (items.length === 0) {
       throw new Error('Cannot create an order with an empty cart.');
+    }
+
+    if (orderType === 'DELIVERY') {
+      const isDeliveryAllowed = await BranchService.isDeliveryAllowed(branchId);
+      if (!isDeliveryAllowed) {
+        throw new Error('Delivery service is currently disabled for this branch');
+      }
     }
 
     // Format items payload for create_order_atomic RPC

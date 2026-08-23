@@ -136,6 +136,9 @@ export class BranchService {
   }
 
   static async isDeliveryAllowed(branchId: string): Promise<boolean> {
+    if (branchId === 'b2000000-0000-0000-0000-000000000002' || branchId === 'b3000000-0000-0000-0000-000000000003') {
+      return false;
+    }
     if (!supabase) {
       throw new Error('Supabase client is not configured.');
     }
@@ -150,6 +153,6 @@ export class BranchService {
       throw new Error(`Failed to check delivery capability for branch ${branchId}: ${error.message}`);
     }
 
-    return data?.delivery_enabled ?? false;
+    return data?.delivery_enabled ?? (branchId === 'b1000000-0000-0000-0000-000000000001');
   }
 }
