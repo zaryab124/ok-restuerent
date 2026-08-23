@@ -30,7 +30,8 @@ export default function CustomerLoginPage() {
       }
       router.push('/');
     } catch (err: any) {
-      setError(err.message || 'Authentication failed');
+      const msg = typeof err === 'string' ? err : err?.message ? String(err.message) : 'Authentication failed';
+      setError(msg === '{}' ? 'Authentication failed' : msg);
       setLoading(false);
     }
   };

@@ -80,7 +80,10 @@ export class AuthService {
     });
 
     if (authError) {
-      throw new Error(authError.message);
+      const errMsg = typeof authError.message === 'string' && authError.message !== '{}'
+        ? authError.message 
+        : 'Invalid login credentials. Please verify your email and password.';
+      throw new Error(errMsg);
     }
 
     if (!authData.user) {

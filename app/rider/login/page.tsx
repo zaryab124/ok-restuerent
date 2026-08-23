@@ -22,7 +22,8 @@ export default function RiderLoginPage() {
       await AuthService.login(email, password, 'RIDER');
       router.push('/rider');
     } catch (err: any) {
-      setError(err.message || 'Login failed');
+      const msg = typeof err === 'string' ? err : err?.message ? String(err.message) : 'Invalid login credentials';
+      setError(msg === '{}' ? 'Invalid login credentials' : msg);
       setLoading(false);
     }
   };
