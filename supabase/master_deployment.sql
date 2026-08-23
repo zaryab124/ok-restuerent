@@ -236,6 +236,7 @@ RETURNS BOOLEAN LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public, p
     SELECT EXISTS (SELECT 1 FROM profiles WHERE id = p_user_id AND role = 'OWNER');
 $$;
 
+DROP FUNCTION IF EXISTS get_public_merchant_payment_info();
 CREATE OR REPLACE FUNCTION get_public_merchant_payment_info()
 RETURNS TABLE (
     bank_name TEXT,
