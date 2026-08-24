@@ -49,9 +49,19 @@ export default function RiderPortal() {
   };
 
   const handleUpdateDeliveryStatus = async (orderId: string, nextStatus: OrderStatus) => {
-    await OrderService.updateOrderStatus(orderId, nextStatus, riderInfo.id, `Rider updated status to ${nextStatus}`);
-    setMessage(`Delivery status updated to ${nextStatus.replace(/_/g, ' ')}!`);
-    loadRiderData();
+    // Optimistic UI update for instant response
+    setMyAssignedOrders((prev) =>
+      prev.map((o) => (o.id === orderId ? { ...o, status: nextStatus } : o))
+    );
+
+    try {
+      await OrderService.updateOrderStatus(orderId, nextStatus, riderInfo.id, `Rider updated status to ${nextStatus}`);
+      setMessage(`Delivery status updated to ${nextStatus.replace(/_/g, ' ')}!`);
+    } catch (err) {
+      console.error('Rider status update error:', err);
+    } finally {
+      loadRiderData();
+    }
   };
 
   return (

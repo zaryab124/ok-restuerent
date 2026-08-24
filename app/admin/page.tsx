@@ -83,8 +83,18 @@ export default function BranchAdminPortal() {
   }
 
   const handleUpdateStatus = async (orderId: string, nextStatus: any) => {
-    await OrderService.updateOrderStatus(orderId, nextStatus, 'admin-1', `Branch admin marked ${nextStatus}`);
-    loadBranchData(selectedBranchId);
+    // Optimistic UI update for instant button responsiveness
+    setOrders((prevOrders) =>
+      prevOrders.map((o) => (o.id === orderId ? { ...o, status: nextStatus } : o))
+    );
+
+    try {
+      await OrderService.updateOrderStatus(orderId, nextStatus, 'admin-1', `Branch admin marked ${nextStatus}`);
+    } catch (err) {
+      console.error('Status update persistence error:', err);
+    } finally {
+      loadBranchData(selectedBranchId);
+    }
   };
 
   const handleCreateTable = async (e: React.FormEvent) => {

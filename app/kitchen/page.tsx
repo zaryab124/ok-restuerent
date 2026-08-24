@@ -33,8 +33,18 @@ export default function KitchenDisplaySystem() {
   }
 
   const handleUpdateStatus = async (orderId: string, nextStatus: OrderStatus) => {
-    await OrderService.updateOrderStatus(orderId, nextStatus, 'kitchen-1', `Kitchen marked ${nextStatus}`);
-    loadKitchenOrders(selectedBranchId);
+    // Optimistic UI update for instant response
+    setOrders((prevOrders) =>
+      prevOrders.map((o) => (o.id === orderId ? { ...o, status: nextStatus } : o))
+    );
+
+    try {
+      await OrderService.updateOrderStatus(orderId, nextStatus, 'kitchen-1', `Kitchen marked ${nextStatus}`);
+    } catch (err) {
+      console.error('Kitchen status update error:', err);
+    } finally {
+      loadKitchenOrders(selectedBranchId);
+    }
   };
 
   const confirmedOrders = orders.filter((o) => o.status === 'CONFIRMED');
