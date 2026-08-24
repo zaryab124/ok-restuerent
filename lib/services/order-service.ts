@@ -8,10 +8,57 @@ type OrderListener = (order: Order) => void;
 export class OrderService {
   private static listeners: Set<OrderListener> = new Set();
 
+  static getStatusOverrides(): Record<string, OrderStatus> {
+    if (typeof window === 'undefined') return {};
+    try {
+      const saved = localStorage.getItem('ok_order_status_overrides');
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  }
+
+  static setStatusOverride(orderId: string, status: OrderStatus) {
+    if (typeof window === 'undefined') return;
+    try {
+      const overrides = this.getStatusOverrides();
+      overrides[orderId] = status;
+      localStorage.setItem('ok_order_status_overrides', JSON.stringify(overrides));
+      window.dispatchEvent(new CustomEvent('ok_order_status_changed', { detail: { orderId, status } }));
+    } catch {}
+  }
+
   static subscribe(listener: OrderListener): () => void {
     this.listeners.add(listener);
+
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === 'ok_order_status_overrides' && e.newValue) {
+        try {
+          const map = JSON.parse(e.newValue);
+          Object.entries(map).forEach(([id, status]) => {
+            listener({ id, status } as any);
+          });
+        } catch {}
+      }
+    };
+
+    const handleCustom = (e: any) => {
+      if (e.detail?.orderId && e.detail?.status) {
+        listener({ id: e.detail.orderId, status: e.detail.status } as any);
+      }
+    };
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('storage', handleStorage);
+      window.addEventListener('ok_order_status_changed', handleCustom);
+    }
+
     return () => {
       this.listeners.delete(listener);
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('storage', handleStorage);
+        window.removeEventListener('ok_order_status_changed', handleCustom);
+      }
     };
   }
 
@@ -198,8 +245,11 @@ export class OrderService {
       throw new Error(`Failed to fetch orders: ${error.message}`);
     }
 
+    const overrides = this.getStatusOverrides();
+
     return (data || []).map((o: any) => {
       const rawAssignment = Array.isArray(o.rider_assignment) ? o.rider_assignment[0] : o.rider_assignment;
+      const effectiveStatus: OrderStatus = (overrides[o.id] || o.status) as OrderStatus;
       return {
         id: o.id,
         order_number: o.order_number,
@@ -217,7 +267,7 @@ export class OrderService {
         total_amount: Number(o.total_amount),
         payment_method: o.payment_method,
         payment_status: o.payment_status,
-        status: o.status,
+        status: effectiveStatus,
         created_at: o.created_at,
         updated_at: o.updated_at,
         items: (o.items || []).map((i: any) => ({
@@ -391,6 +441,9 @@ export class OrderService {
       throw new Error('Supabase client is not configured.');
     }
 
+    // 1. Immediately record status override for cross-tab realtime synchronization
+    this.setStatusOverride(orderId, newStatus);
+
     // Try RPC first
     const { error: rpcError } = await supabase.rpc('update_order_status_secure', {
       p_order_id: orderId,
@@ -443,6 +496,8 @@ export class OrderService {
     if (!supabase) {
       throw new Error('Supabase client is not configured.');
     }
+
+    this.setStatusOverride(orderId, 'ASSIGNED');
 
     const isValidUuid = (id: string) =>
       /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);

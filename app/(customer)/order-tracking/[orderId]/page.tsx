@@ -26,7 +26,15 @@ export default function OrderTrackingPage({ params }: { params: { orderId: strin
       }
     });
 
-    return () => unsubscribe();
+    const interval = setInterval(async () => {
+      const res = await OrderService.getOrderById(params.orderId);
+      if (res) setOrder({ ...res });
+    }, 3000);
+
+    return () => {
+      unsubscribe();
+      clearInterval(interval);
+    };
   }, [params.orderId]);
 
   if (loading) {
