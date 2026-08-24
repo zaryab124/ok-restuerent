@@ -347,39 +347,82 @@ export default function BranchAdminPortal() {
                       <td className="p-4">
                         <OrderStatusBadge status={o.status} />
                       </td>
-                      <td className="p-4 text-right space-x-2">
-                        {o.status === 'PENDING' && (
-                          <>
+                      <td className="p-4 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          {o.status === 'PENDING' && (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => handleUpdateStatus(o.id, 'CONFIRMED')}
+                                className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black rounded-lg text-xs shadow-md transition-all active:scale-95 cursor-pointer"
+                              >
+                                Approve
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleUpdateStatus(o.id, 'REJECTED')}
+                                className="px-3 py-1.5 bg-rose-500/20 hover:bg-rose-500/40 text-rose-400 font-bold rounded-lg text-xs transition-all active:scale-95 cursor-pointer"
+                              >
+                                Reject
+                              </button>
+                            </>
+                          )}
+                          {o.status === 'CONFIRMED' && (
                             <button
-                              onClick={() => handleUpdateStatus(o.id, 'CONFIRMED')}
-                              className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black rounded-lg text-xs"
+                              type="button"
+                              onClick={() => handleUpdateStatus(o.id, 'PREPARING')}
+                              className="px-3 py-1.5 bg-blue-500 hover:bg-blue-600 text-white font-bold rounded-lg text-xs shadow-md transition-all active:scale-95 cursor-pointer"
                             >
-                              Approve
+                              Send to Kitchen
                             </button>
+                          )}
+                          {o.status === 'PREPARING' && (
                             <button
-                              onClick={() => handleUpdateStatus(o.id, 'REJECTED')}
-                              className="px-3 py-1.5 bg-rose-500/20 text-rose-400 font-bold rounded-lg text-xs"
+                              type="button"
+                              onClick={() => handleUpdateStatus(o.id, 'READY')}
+                              className="px-3 py-1.5 bg-indigo-500 hover:bg-indigo-600 text-white font-bold rounded-lg text-xs shadow-md transition-all active:scale-95 cursor-pointer"
                             >
-                              Reject
+                              Mark Ready
                             </button>
-                          </>
-                        )}
-                        {o.status === 'CONFIRMED' && (
-                          <button
-                            onClick={() => handleUpdateStatus(o.id, 'PREPARING')}
-                            className="px-3 py-1.5 bg-blue-500 hover:bg-blue-600 text-white font-bold rounded-lg text-xs"
+                          )}
+                          {(o.status === 'READY' || o.status === 'ASSIGNED' || o.status === 'OUT_FOR_DELIVERY' || o.status === 'DELIVERED') && (
+                            <button
+                              type="button"
+                              onClick={() => handleUpdateStatus(o.id, 'COMPLETED')}
+                              className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black rounded-lg text-xs shadow-md transition-all active:scale-95 cursor-pointer"
+                            >
+                              Complete Order
+                            </button>
+                          )}
+                          {o.status === 'COMPLETED' && (
+                            <span className="text-[11px] font-bold text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-lg border border-emerald-500/20">
+                              Completed ✅
+                            </span>
+                          )}
+                          {o.status === 'REJECTED' && (
+                            <span className="text-[11px] font-bold text-rose-400 bg-rose-500/10 px-2.5 py-1 rounded-lg border border-rose-500/20">
+                              Rejected ❌
+                            </span>
+                          )}
+
+                          {/* Quick Status Change Selector */}
+                          <select
+                            value={o.status}
+                            onChange={(e) => handleUpdateStatus(o.id, e.target.value as any)}
+                            className="bg-slate-900 border border-slate-700 text-slate-300 text-[11px] font-bold rounded-lg px-2 py-1 focus:outline-none focus:border-amber-500 cursor-pointer"
                           >
-                            Send to Kitchen
-                          </button>
-                        )}
-                        {o.status === 'PREPARING' && (
-                          <button
-                            onClick={() => handleUpdateStatus(o.id, 'READY')}
-                            className="px-3 py-1.5 bg-indigo-500 hover:bg-indigo-600 text-white font-bold rounded-lg text-xs"
-                          >
-                            Mark Ready
-                          </button>
-                        )}
+                            <option value="PENDING">PENDING</option>
+                            <option value="CONFIRMED">CONFIRMED</option>
+                            <option value="PREPARING">PREPARING</option>
+                            <option value="READY">READY</option>
+                            <option value="ASSIGNED">ASSIGNED</option>
+                            <option value="OUT_FOR_DELIVERY">OUT FOR DELIVERY</option>
+                            <option value="DELIVERED">DELIVERED</option>
+                            <option value="COMPLETED">COMPLETED</option>
+                            <option value="REJECTED">REJECTED</option>
+                            <option value="CANCELLED">CANCELLED</option>
+                          </select>
+                        </div>
                       </td>
                     </tr>
                   ))}
