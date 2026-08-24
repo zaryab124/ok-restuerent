@@ -13,7 +13,10 @@ export default function OrderTrackingPage({ params }: { params: { orderId: strin
 
   useEffect(() => {
     async function loadOrder() {
-      const res = await OrderService.getOrderById(params.orderId);
+      let res = await OrderService.getOrderByTrackingToken(params.orderId).catch(() => null);
+      if (!res) {
+        res = await OrderService.getOrderById(params.orderId).catch(() => null);
+      }
       setOrder(res);
       setLoading(false);
     }
@@ -21,15 +24,22 @@ export default function OrderTrackingPage({ params }: { params: { orderId: strin
 
     // Subscribe to realtime updates
     const unsubscribe = OrderService.subscribe((updatedOrder) => {
-      if (updatedOrder.id === params.orderId || updatedOrder.order_number === params.orderId) {
+      if (
+        updatedOrder.id === params.orderId ||
+        updatedOrder.order_number === params.orderId ||
+        updatedOrder.tracking_token === params.orderId
+      ) {
         setOrder({ ...updatedOrder });
       }
     });
 
     const interval = setInterval(async () => {
-      const res = await OrderService.getOrderById(params.orderId);
+      let res = await OrderService.getOrderByTrackingToken(params.orderId).catch(() => null);
+      if (!res) {
+        res = await OrderService.getOrderById(params.orderId).catch(() => null);
+      }
       if (res) setOrder({ ...res });
-    }, 3000);
+    }, 4000);
 
     return () => {
       unsubscribe();

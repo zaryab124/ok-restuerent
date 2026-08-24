@@ -3,16 +3,19 @@
 import React, { useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
 import QRCode from 'qrcode';
-import { ShieldCheck, Utensils, QrCode, CheckCircle, XCircle, Clock, MapPin, Plus, Printer, RefreshCw, AlertCircle, ShoppingBag, Edit3, Trash2, Sparkles, Check, Camera, Image as ImageIcon } from 'lucide-react';
-import { Branch, Order, RestaurantTable, MenuItem, BuffetRegistration, BuffetBooking, MenuCategory } from '@/lib/types';
+import { useRouter } from 'next/navigation';
+import { ShieldCheck, Utensils, QrCode, CheckCircle, XCircle, Clock, MapPin, Plus, Printer, RefreshCw, AlertCircle, ShoppingBag, Edit3, Trash2, Sparkles, Check, Camera, Image as ImageIcon, LogOut } from 'lucide-react';
+import { Branch, Order, RestaurantTable, MenuItem, BuffetRegistration, BuffetBooking, MenuCategory, OrderStatus } from '@/lib/types';
 import { BranchService } from '@/lib/services/branch-service';
 import { OrderService } from '@/lib/services/order-service';
 import { QRService } from '@/lib/services/qr-service';
 import { MenuService } from '@/lib/services/menu-service';
 import { BuffetService } from '@/lib/services/buffet-service';
+import { AuthService, AuthenticatedUser } from '@/lib/services/auth-service';
 import { OrderStatusBadge } from '@/components/OrderStatusBadge';
 
 export default function BranchAdminPortal() {
+  const router = useRouter();
   const [branches, setBranches] = useState<Branch[]>([]);
   const [selectedBranchId, setSelectedBranchId] = useState<string>('b1000000-0000-0000-0000-000000000001');
   const [orders, setOrders] = useState<Order[]>([]);
@@ -21,6 +24,8 @@ export default function BranchAdminPortal() {
   const [categories, setCategories] = useState<MenuCategory[]>([]);
   const [buffets, setBuffets] = useState<BuffetRegistration[]>([]);
   const [buffetBookings, setBuffetBookings] = useState<BuffetBooking[]>([]);
+  const [adminUser, setAdminUser] = useState<AuthenticatedUser | null>(null);
+  const [loading, setLoading] = useState(true);
 
   const [activeTab, setActiveTab] = useState<'orders' | 'tables' | 'menu' | 'buffet'>('orders');
   
@@ -50,12 +55,33 @@ export default function BranchAdminPortal() {
   const [scanMessage, setScanMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    BranchService.getBranches().then((b) => {
+    async function initAdmin() {
+      const user = await AuthService.fetchCurrentUser();
+      if (!user || (user.role !== 'BRANCH_ADMIN' && user.role !== 'OWNER')) {
+        router.push('/admin/login');
+        return;
+      }
+
+      setAdminUser(user);
+
+      const b = await BranchService.getBranches();
       setBranches(b);
-    });
-  }, []);
+
+      if (user.role === 'BRANCH_ADMIN' && user.branch_id) {
+        setSelectedBranchId(user.branch_id);
+      } else if (b.length > 0) {
+        setSelectedBranchId(b[0].id);
+      }
+
+      setLoading(false);
+    }
+
+    initAdmin();
+  }, [router]);
 
   useEffect(() => {
+    if (!adminUser) return;
+
     loadBranchData(selectedBranchId);
 
     const unsubscribe = OrderService.subscribe((updatedOrder) => {
@@ -63,8 +89,9 @@ export default function BranchAdminPortal() {
         prev.map((o) => (o.id === updatedOrder.id ? { ...o, status: updatedOrder.status } : o))
       );
     });
+
     return () => unsubscribe();
-  }, [selectedBranchId]);
+  }, [selectedBranchId, adminUser]);
 
   async function loadBranchData(branchId: string) {
     const oList = await OrderService.getOrders(branchId === 'all' ? undefined : { branchId });
@@ -84,17 +111,21 @@ export default function BranchAdminPortal() {
     setBuffets([...bList]);
   }
 
-  const handleUpdateStatus = async (orderId: string, nextStatus: any) => {
-    // Optimistic UI update - updates state instantly and retains new status
-    setOrders((prevOrders) =>
-      prevOrders.map((o) => (o.id === orderId ? { ...o, status: nextStatus } : o))
-    );
+  const handleUpdateStatus = async (orderId: string, nextStatus: OrderStatus) => {
+    if (!adminUser) return;
 
     try {
-      await OrderService.updateOrderStatus(orderId, nextStatus, 'admin-1', `Branch admin marked ${nextStatus}`);
-    } catch (err) {
-      console.error('Status update persistence error:', err);
+      await OrderService.updateOrderStatus(orderId, nextStatus, adminUser.id, `Branch admin marked ${nextStatus}`);
+      loadBranchData(selectedBranchId);
+    } catch (err: any) {
+      alert(`Status update failed: ${err.message}`);
+      loadBranchData(selectedBranchId);
     }
+  };
+
+  const handleLogout = async () => {
+    await AuthService.logout();
+    router.push('/admin/login');
   };
 
   const handleCreateTable = async (e: React.FormEvent) => {
@@ -219,19 +250,37 @@ export default function BranchAdminPortal() {
           </div>
 
           <div className="flex items-center gap-3">
-            <MapPin className="w-4 h-4 text-amber-400 hidden sm:block" />
-            <select
-              value={selectedBranchId}
-              onChange={(e) => setSelectedBranchId(e.target.value)}
-              className="bg-slate-950 border border-slate-800 text-xs font-bold text-amber-400 px-3 py-2 rounded-xl focus:outline-none"
+            {adminUser?.role === 'OWNER' ? (
+              <div className="flex items-center gap-2">
+                <MapPin className="w-4 h-4 text-amber-400 hidden sm:block" />
+                <select
+                  value={selectedBranchId}
+                  onChange={(e) => setSelectedBranchId(e.target.value)}
+                  className="bg-slate-950 border border-slate-800 text-xs font-bold text-amber-400 px-3 py-2 rounded-xl focus:outline-none"
+                >
+                  <option value="all">🌐 All Branches (All Orders)</option>
+                  {branches.map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 bg-slate-950 px-3 py-1.5 rounded-xl border border-slate-800">
+                <MapPin className="w-4 h-4 text-amber-400" />
+                <span className="text-xs font-bold text-white">
+                  {branches.find((b) => b.id === selectedBranchId)?.name || 'Assigned Branch'}
+                </span>
+              </div>
+            )}
+            <button
+              onClick={handleLogout}
+              className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors"
+              title="Logout"
             >
-              <option value="all">🌐 All Branches (All Orders)</option>
-              {branches.map((b) => (
-                <option key={b.id} value={b.id}>
-                  {b.name}
-                </option>
-              ))}
-            </select>
+              <LogOut className="w-4 h-4" />
+            </button>
           </div>
         </div>
       </header>
@@ -371,30 +420,44 @@ export default function BranchAdminPortal() {
                             </>
                           )}
                           {o.status === 'CONFIRMED' && (
-                            <button
-                              type="button"
-                              onClick={() => handleUpdateStatus(o.id, 'PREPARING')}
-                              className="px-3 py-1.5 bg-blue-500 hover:bg-blue-600 text-white font-bold rounded-lg text-xs shadow-md transition-all active:scale-95 cursor-pointer"
-                            >
-                              Send to Kitchen
-                            </button>
+                            <span className="text-[11px] font-bold text-amber-400 bg-amber-500/10 px-2.5 py-1 rounded-lg border border-amber-500/20">
+                              Waiting for Kitchen
+                            </span>
                           )}
                           {o.status === 'PREPARING' && (
-                            <button
-                              type="button"
-                              onClick={() => handleUpdateStatus(o.id, 'READY')}
-                              className="px-3 py-1.5 bg-indigo-500 hover:bg-indigo-600 text-white font-bold rounded-lg text-xs shadow-md transition-all active:scale-95 cursor-pointer"
-                            >
-                              Mark Ready
-                            </button>
+                            <span className="text-[11px] font-bold text-blue-400 bg-blue-500/10 px-2.5 py-1 rounded-lg border border-blue-500/20">
+                              Kitchen Cooking 🍳
+                            </span>
                           )}
-                          {(o.status === 'READY' || o.status === 'ASSIGNED' || o.status === 'OUT_FOR_DELIVERY' || o.status === 'DELIVERED') && (
+                          {o.status === 'READY' && (
+                            <>
+                              {o.order_type === 'DELIVERY' ? (
+                                <span className="text-[11px] font-bold text-indigo-400 bg-indigo-500/10 px-2.5 py-1 rounded-lg border border-indigo-500/20">
+                                  Ready for Rider 🛵
+                                </span>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => handleUpdateStatus(o.id, 'COMPLETED')}
+                                  className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black rounded-lg text-xs shadow-md transition-all active:scale-95 cursor-pointer"
+                                >
+                                  Complete & Served
+                                </button>
+                              )}
+                            </>
+                          )}
+                          {(o.status === 'ASSIGNED' || o.status === 'PICKED_UP' || o.status === 'OUT_FOR_DELIVERY') && (
+                            <span className="text-[11px] font-bold text-amber-400 bg-amber-500/10 px-2.5 py-1 rounded-lg border border-amber-500/20">
+                              {o.status.replace(/_/g, ' ')} 🛵
+                            </span>
+                          )}
+                          {o.status === 'DELIVERED' && (
                             <button
                               type="button"
                               onClick={() => handleUpdateStatus(o.id, 'COMPLETED')}
                               className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black rounded-lg text-xs shadow-md transition-all active:scale-95 cursor-pointer"
                             >
-                              Complete Order
+                              Mark Completed ✅
                             </button>
                           )}
                           {o.status === 'COMPLETED' && (
@@ -407,24 +470,11 @@ export default function BranchAdminPortal() {
                               Rejected ❌
                             </span>
                           )}
-
-                          {/* Quick Status Change Selector */}
-                          <select
-                            value={o.status}
-                            onChange={(e) => handleUpdateStatus(o.id, e.target.value as any)}
-                            className="bg-slate-900 border border-slate-700 text-slate-300 text-[11px] font-bold rounded-lg px-2 py-1 focus:outline-none focus:border-amber-500 cursor-pointer"
-                          >
-                            <option value="PENDING">PENDING</option>
-                            <option value="CONFIRMED">CONFIRMED</option>
-                            <option value="PREPARING">PREPARING</option>
-                            <option value="READY">READY</option>
-                            <option value="ASSIGNED">ASSIGNED</option>
-                            <option value="OUT_FOR_DELIVERY">OUT FOR DELIVERY</option>
-                            <option value="DELIVERED">DELIVERED</option>
-                            <option value="COMPLETED">COMPLETED</option>
-                            <option value="REJECTED">REJECTED</option>
-                            <option value="CANCELLED">CANCELLED</option>
-                          </select>
+                          {o.status === 'CANCELLED' && (
+                            <span className="text-[11px] font-bold text-slate-400 bg-slate-800 px-2.5 py-1 rounded-lg border border-slate-700">
+                              Cancelled 🚫
+                            </span>
+                          )}
                         </div>
                       </td>
                     </tr>

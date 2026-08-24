@@ -27,12 +27,13 @@ export const Navbar: React.FC<Props> = ({
   const [user, setUser] = useState<Profile | null>(null);
 
   useEffect(() => {
-    const currentUser = AuthService.getCurrentUser();
-    setUser(currentUser);
+    AuthService.fetchCurrentUser().then((currentUser) => {
+      setUser(currentUser);
+    });
   }, []);
 
-  const handleLogout = () => {
-    AuthService.logout();
+  const handleLogout = async () => {
+    await AuthService.logout();
     setUser(null);
     window.location.reload();
   };

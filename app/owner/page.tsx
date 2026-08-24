@@ -1,18 +1,23 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { ShieldCheck, TrendingUp, DollarSign, ShoppingBag, MapPin, Users, ToggleLeft, ToggleRight, PieChart, BarChart3, CreditCard, Landmark, Smartphone, Check, Save } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { ShieldCheck, TrendingUp, DollarSign, ShoppingBag, MapPin, Users, ToggleLeft, ToggleRight, PieChart, BarChart3, CreditCard, Landmark, Smartphone, Check, Save, LogOut } from 'lucide-react';
 import { Branch, Order, Profile } from '@/lib/types';
 import { BranchService } from '@/lib/services/branch-service';
 import { OrderService } from '@/lib/services/order-service';
 import { MerchantConfigService, MerchantBankConfig } from '@/lib/services/merchant-config-service';
-import { DEMO_USERS } from '@/lib/supabase/mock-db';
+import { AuthService, AuthenticatedUser } from '@/lib/services/auth-service';
+import { supabase } from '@/lib/supabase/client';
 
 export default function OwnerExecutivePortal() {
+  const router = useRouter();
   const [branches, setBranches] = useState<Branch[]>([]);
   const [selectedBranchId, setSelectedBranchId] = useState<string>('ALL');
   const [orders, setOrders] = useState<Order[]>([]);
-  const [users] = useState<Profile[]>(DEMO_USERS);
+  const [users, setUsers] = useState<Profile[]>([]);
+  const [ownerInfo, setOwnerInfo] = useState<AuthenticatedUser | null>(null);
+  const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'analytics' | 'capabilities' | 'payments' | 'staff'>('analytics');
 
   // Bank & Merchant Configuration State
@@ -30,9 +35,28 @@ export default function OwnerExecutivePortal() {
   const [saveSuccessMessage, setSaveSuccessMessage] = useState<string | null>(null);
 
   useEffect(() => {
+    async function initOwner() {
+      const user = await AuthService.fetchCurrentUser();
+      if (!user || user.role !== 'OWNER') {
+        router.push('/owner/login');
+        return;
+      }
+      setOwnerInfo(user);
+      setLoading(false);
+    }
+    initOwner();
+  }, [router]);
+
+  useEffect(() => {
+    if (!ownerInfo) return;
     loadOwnerData();
     MerchantConfigService.getConfig().then(setBankConfig);
-  }, [selectedBranchId]);
+
+    const unsubscribe = OrderService.subscribe(() => {
+      loadOwnerData();
+    });
+    return () => unsubscribe();
+  }, [selectedBranchId, ownerInfo]);
 
   async function loadOwnerData() {
     const bList = await BranchService.getBranches();
@@ -41,7 +65,19 @@ export default function OwnerExecutivePortal() {
     const filter = selectedBranchId !== 'ALL' ? { branchId: selectedBranchId } : undefined;
     const oList = await OrderService.getOrders(filter);
     setOrders(oList);
+
+    if (supabase) {
+      const { data: dbProfiles } = await supabase.from('profiles').select('*').order('created_at', { ascending: false });
+      if (dbProfiles) {
+        setUsers(dbProfiles);
+      }
+    }
   }
+
+  const handleLogout = async () => {
+    await AuthService.logout();
+    router.push('/owner/login');
+  };
 
   const handleToggleCapability = async (branchId: string, capKey: 'dine_in_enabled' | 'takeaway_enabled' | 'delivery_enabled', currentValue: boolean) => {
     await BranchService.updateBranchCapabilities(branchId, { [capKey]: !currentValue });
@@ -102,6 +138,13 @@ export default function OwnerExecutivePortal() {
                 </option>
               ))}
             </select>
+            <button
+              onClick={handleLogout}
+              className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors"
+              title="Logout"
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
           </div>
         </div>
       </header>

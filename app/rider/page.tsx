@@ -1,26 +1,60 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { Bike, MapPin, Phone, CheckCircle, Navigation, Clock, AlertCircle } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { Bike, MapPin, Phone, CheckCircle, Navigation, Clock, AlertCircle, LogOut } from 'lucide-react';
 import { Order, OrderStatus } from '@/lib/types';
 import { OrderService } from '@/lib/services/order-service';
+import { AuthService, AuthenticatedUser } from '@/lib/services/auth-service';
+import { BranchService } from '@/lib/services/branch-service';
 
 export default function RiderPortal() {
+  const router = useRouter();
   const [availableOrders, setAvailableOrders] = useState<Order[]>([]);
   const [myAssignedOrders, setMyAssignedOrders] = useState<Order[]>([]);
-  const [riderInfo] = useState({ id: '40000000-0000-0000-0000-000000000001', name: 'Ali Rider (Dera Delivery)', branchId: 'b1000000-0000-0000-0000-000000000001' });
+  const [riderInfo, setRiderInfo] = useState<AuthenticatedUser | null>(null);
+  const [branchName, setBranchName] = useState<string>('Assigned Branch');
   const [message, setMessage] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    loadRiderData();
-    const unsubscribe = OrderService.subscribe(() => {
-      loadRiderData();
-    });
-    return () => unsubscribe();
-  }, []);
+    async function initRider() {
+      const user = await AuthService.fetchCurrentUser();
+      if (!user || (user.role !== 'RIDER' && user.role !== 'OWNER')) {
+        router.push('/rider/login');
+        return;
+      }
 
-  async function loadRiderData() {
-    const allBranchOrders = await OrderService.getOrders({ branchId: riderInfo.branchId });
+      setRiderInfo(user);
+
+      if (user.branch_id) {
+        const branch = await BranchService.getBranchById(user.branch_id);
+        if (branch) {
+          setBranchName(branch.name);
+        }
+      }
+
+      setLoading(false);
+    }
+
+    initRider();
+  }, [router]);
+
+  useEffect(() => {
+    if (!riderInfo) return;
+
+    loadRiderData(riderInfo);
+
+    const unsubscribe = OrderService.subscribe(() => {
+      loadRiderData(riderInfo);
+    });
+
+    return () => unsubscribe();
+  }, [riderInfo]);
+
+  async function loadRiderData(currentRider: AuthenticatedUser) {
+    const filter = currentRider.role === 'OWNER' ? undefined : (currentRider.branch_id ? { branchId: currentRider.branch_id } : undefined);
+    const allBranchOrders = await OrderService.getOrders(filter);
     
     // Available ready delivery orders not claimed yet
     const readyForClaiming = allBranchOrders.filter(
@@ -29,7 +63,7 @@ export default function RiderPortal() {
     
     // My claimed/assigned active orders
     const myOrders = allBranchOrders.filter(
-      (o) => o.rider_assignment?.rider_id === riderInfo.id && ['ASSIGNED', 'PICKED_UP', 'OUT_FOR_DELIVERY'].includes(o.status)
+      (o) => o.rider_assignment?.rider_id === currentRider.id && ['ASSIGNED', 'PICKED_UP', 'OUT_FOR_DELIVERY'].includes(o.status)
     );
 
     setAvailableOrders(readyForClaiming);
@@ -37,32 +71,47 @@ export default function RiderPortal() {
   }
 
   const handleClaimOrder = async (orderId: string) => {
+    if (!riderInfo) return;
     setMessage(null);
-    const success = await OrderService.claimOrderForRider(orderId, riderInfo.id, riderInfo.name);
-    if (success) {
-      setMessage(`Delivery Order Claimed! Status transitioned to ASSIGNED.`);
-      loadRiderData();
-    } else {
-      setMessage(`Order was already claimed by another rider.`);
-      loadRiderData();
+    try {
+      const success = await OrderService.claimOrderForRider(orderId, riderInfo.id, riderInfo.full_name);
+      if (success) {
+        setMessage(`Delivery order claimed! Status transitioned to ASSIGNED.`);
+      } else {
+        setMessage(`Order was already claimed by another rider.`);
+      }
+      loadRiderData(riderInfo);
+    } catch (err: any) {
+      setMessage(`Claim failed: ${err.message}`);
     }
   };
 
   const handleUpdateDeliveryStatus = async (orderId: string, nextStatus: OrderStatus) => {
-    // Optimistic UI update for instant response
-    setMyAssignedOrders((prev) =>
-      prev.map((o) => (o.id === orderId ? { ...o, status: nextStatus } : o))
-    );
-
+    if (!riderInfo) return;
     try {
       await OrderService.updateOrderStatus(orderId, nextStatus, riderInfo.id, `Rider updated status to ${nextStatus}`);
       setMessage(`Delivery status updated to ${nextStatus.replace(/_/g, ' ')}!`);
-    } catch (err) {
-      console.error('Rider status update error:', err);
+    } catch (err: any) {
+      setMessage(`Status update failed: ${err.message}`);
     } finally {
-      loadRiderData();
+      loadRiderData(riderInfo);
     }
   };
+
+  const handleLogout = async () => {
+    await AuthService.logout();
+    router.push('/rider/login');
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center">
+        <div className="text-amber-400 font-bold text-sm">Loading Rider Portal...</div>
+      </div>
+    );
+  }
+
+  if (!riderInfo) return null;
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
@@ -76,13 +125,22 @@ export default function RiderPortal() {
             </div>
             <div>
               <h1 className="text-lg font-black text-white">RIDER DELIVERY PORTAL</h1>
-              <p className="text-xs text-slate-400">Dera Chungi Delivery Operations</p>
+              <p className="text-xs text-slate-400">{branchName} Operations</p>
             </div>
           </div>
 
-          <div className="text-right">
-            <span className="text-xs font-bold text-white block">{riderInfo.name}</span>
-            <span className="text-[10px] text-emerald-400 font-semibold uppercase">Active • Online</span>
+          <div className="flex items-center gap-4">
+            <div className="text-right">
+              <span className="text-xs font-bold text-white block">{riderInfo.full_name}</span>
+              <span className="text-[10px] text-emerald-400 font-semibold uppercase">Active • Online</span>
+            </div>
+            <button
+              onClick={handleLogout}
+              className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors"
+              title="Logout"
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
           </div>
         </div>
       </header>

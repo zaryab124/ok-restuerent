@@ -3,70 +3,37 @@ import { supabase } from '../supabase/client';
 import { PaymentService } from './payment-service';
 import { BranchService } from './branch-service';
 
-type OrderListener = (order: Order) => void;
-
 export class OrderService {
-  private static listeners: Set<OrderListener> = new Set();
+  /**
+   * Subscribe to live database changes via Supabase Realtime.
+   */
+  static subscribe(callback: (order: Order) => void): () => void {
+    if (!supabase) return () => {};
 
-  static getStatusOverrides(): Record<string, OrderStatus> {
-    if (typeof window === 'undefined') return {};
-    try {
-      const saved = localStorage.getItem('ok_order_status_overrides');
-      return saved ? JSON.parse(saved) : {};
-    } catch {
-      return {};
-    }
-  }
-
-  static setStatusOverride(orderId: string, status: OrderStatus) {
-    if (typeof window === 'undefined') return;
-    try {
-      const overrides = this.getStatusOverrides();
-      overrides[orderId] = status;
-      localStorage.setItem('ok_order_status_overrides', JSON.stringify(overrides));
-      window.dispatchEvent(new CustomEvent('ok_order_status_changed', { detail: { orderId, status } }));
-    } catch {}
-  }
-
-  static subscribe(listener: OrderListener): () => void {
-    this.listeners.add(listener);
-
-    const handleStorage = (e: StorageEvent) => {
-      if (e.key === 'ok_order_status_overrides' && e.newValue) {
-        try {
-          const map = JSON.parse(e.newValue);
-          Object.entries(map).forEach(([id, status]) => {
-            listener({ id, status } as any);
-          });
-        } catch {}
-      }
-    };
-
-    const handleCustom = (e: any) => {
-      if (e.detail?.orderId && e.detail?.status) {
-        listener({ id: e.detail.orderId, status: e.detail.status } as any);
-      }
-    };
-
-    if (typeof window !== 'undefined') {
-      window.addEventListener('storage', handleStorage);
-      window.addEventListener('ok_order_status_changed', handleCustom);
-    }
+    const channel = supabase
+      .channel('public-orders-realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'orders' },
+        async (payload) => {
+          if (payload.new && (payload.new as any).id) {
+            const fullOrder = await this.getOrderById((payload.new as any).id).catch(() => null);
+            if (fullOrder) {
+              callback(fullOrder);
+            }
+          }
+        }
+      )
+      .subscribe();
 
     return () => {
-      this.listeners.delete(listener);
-      if (typeof window !== 'undefined') {
-        window.removeEventListener('storage', handleStorage);
-        window.removeEventListener('ok_order_status_changed', handleCustom);
+      if (supabase) {
+        supabase.removeChannel(channel);
       }
     };
   }
 
-  private static notify(order: Order) {
-    this.listeners.forEach((l) => l(order));
-  }
-
-  static getValidTransitions(currentStatus: OrderStatus): OrderStatus[] {
+  static getValidTransitions(currentStatus: OrderStatus, orderType: OrderType = 'DELIVERY'): OrderStatus[] {
     switch (currentStatus) {
       case 'PENDING':
         return ['CONFIRMED', 'REJECTED', 'CANCELLED'];
@@ -75,20 +42,22 @@ export class OrderService {
       case 'PREPARING':
         return ['READY', 'CANCELLED'];
       case 'READY':
-        return ['ASSIGNED', 'COMPLETED', 'CANCELLED'];
+        return orderType === 'DELIVERY' ? ['ASSIGNED', 'CANCELLED'] : ['COMPLETED', 'CANCELLED'];
       case 'ASSIGNED':
         return ['PICKED_UP', 'CANCELLED'];
       case 'PICKED_UP':
         return ['OUT_FOR_DELIVERY', 'CANCELLED'];
       case 'OUT_FOR_DELIVERY':
-        return ['DELIVERED', 'COMPLETED', 'CANCELLED'];
+        return ['DELIVERED', 'CANCELLED'];
+      case 'DELIVERED':
+        return ['COMPLETED'];
       default:
         return [];
     }
   }
 
-  static isValidTransition(from: OrderStatus, to: OrderStatus): boolean {
-    const valid = this.getValidTransitions(from);
+  static isValidTransition(from: OrderStatus, to: OrderStatus, orderType: OrderType = 'DELIVERY'): boolean {
+    const valid = this.getValidTransitions(from, orderType);
     return valid.includes(to);
   }
 
@@ -117,31 +86,16 @@ export class OrderService {
     if (orderType === 'DELIVERY') {
       const isDeliveryAllowed = await BranchService.isDeliveryAllowed(branchId);
       if (!isDeliveryAllowed) {
-        throw new Error('Delivery service is currently disabled for this branch');
+        throw new Error('Delivery service is currently disabled for this branch.');
       }
     }
 
-    // Format items payload for create_order_atomic RPC with UUID sanitization
-    const isValidUuid = (id: string) =>
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
-
-    const itemsPayload = items.map((i) => {
-      let menuItemId = i.menuItem.id;
-      if (!isValidUuid(menuItemId)) {
-        menuItemId = 'd1000000-0000-0000-0000-000000000001';
-      }
-      let variantId = i.variant?.id || null;
-      if (variantId && !isValidUuid(variantId)) {
-        variantId = null;
-      }
-
-      return {
-        menu_item_id: menuItemId,
-        variant_id: variantId,
-        quantity: i.quantity,
-        special_instructions: i.specialInstructions || null,
-      };
-    });
+    const itemsPayload = items.map((i) => ({
+      menu_item_id: i.menuItem.id,
+      variant_id: i.variant?.id || null,
+      quantity: i.quantity,
+      special_instructions: i.specialInstructions || null,
+    }));
 
     const { data, error } = await supabase.rpc('create_order_atomic', {
       p_branch_id: branchId,
@@ -161,61 +115,17 @@ export class OrderService {
 
     const createdRecord = Array.isArray(data) ? data[0] : data;
 
-    if (!createdRecord) {
+    if (!createdRecord || !createdRecord.out_order_id) {
       throw new Error('Order creation failed to return order details.');
     }
 
-    // Process payment gateway if needed
-    const paymentResult = await PaymentService.processPayment(
-      Number(createdRecord.total_amount || createdRecord.out_total_amount),
-      paymentMethod,
-      { name: customerName, phone: customerPhone }
-    );
+    const orderId = createdRecord.out_order_id;
+    const fullOrder = await this.getOrderById(orderId);
 
-    const fullOrder: Order = {
-      id: createdRecord.order_id || createdRecord.out_order_id,
-      order_number: createdRecord.order_number || createdRecord.out_order_number,
-      tracking_token: createdRecord.tracking_token || createdRecord.out_tracking_token,
-      branch_id: branchId,
-      customer_id: params.customerId,
-      customer_name: customerName,
-      customer_phone: customerPhone,
-      order_type: orderType,
-      table_id: tableId,
-      delivery_address: deliveryAddress,
-      delivery_notes: deliveryNotes,
-      subtotal: items.reduce((sum, i) => sum + (i.variant ? i.variant.price : i.menuItem.base_price) * i.quantity, 0),
-      delivery_fee: orderType === 'DELIVERY' ? 100 : 0,
-      total_amount: Number(createdRecord.total_amount),
-      payment_method: paymentMethod,
-      payment_status: paymentResult.paymentStatus,
-      status: 'PENDING',
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      items: items.map((item, idx) => ({
-        id: `oi-${createdRecord.order_id}-${idx}`,
-        order_id: createdRecord.order_id,
-        menu_item_id: item.menuItem.id,
-        variant_id: item.variant?.id,
-        item_name: item.menuItem.name,
-        variant_name: item.variant?.name,
-        unit_price: item.variant ? item.variant.price : item.menuItem.base_price,
-        quantity: item.quantity,
-        subtotal_price: (item.variant ? item.variant.price : item.menuItem.base_price) * item.quantity,
-        special_instructions: item.specialInstructions,
-      })),
-      history: [
-        {
-          id: `hist-${createdRecord.order_id}`,
-          order_id: createdRecord.order_id,
-          to_status: 'PENDING',
-          notes: 'Order placed by customer',
-          created_at: new Date().toISOString(),
-        },
-      ],
-    };
+    if (!fullOrder) {
+      throw new Error('Failed to retrieve placed order from database.');
+    }
 
-    this.notify(fullOrder);
     return fullOrder;
   }
 
@@ -245,11 +155,8 @@ export class OrderService {
       throw new Error(`Failed to fetch orders: ${error.message}`);
     }
 
-    const overrides = this.getStatusOverrides();
-
     return (data || []).map((o: any) => {
       const rawAssignment = Array.isArray(o.rider_assignment) ? o.rider_assignment[0] : o.rider_assignment;
-      const effectiveStatus: OrderStatus = (overrides[o.id] || o.status) as OrderStatus;
       return {
         id: o.id,
         order_number: o.order_number,
@@ -267,7 +174,7 @@ export class OrderService {
         total_amount: Number(o.total_amount),
         payment_method: o.payment_method,
         payment_status: o.payment_status,
-        status: effectiveStatus,
+        status: o.status,
         created_at: o.created_at,
         updated_at: o.updated_at,
         items: (o.items || []).map((i: any) => ({
@@ -381,6 +288,9 @@ export class OrderService {
       throw new Error('Supabase client is not configured.');
     }
 
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(trackingToken);
+    if (!isUuid) return null;
+
     const { data, error } = await supabase.rpc('get_order_by_tracking_token', {
       p_tracking_token: trackingToken,
     });
@@ -428,6 +338,13 @@ export class OrderService {
         notes: h.notes || undefined,
         created_at: h.created_at,
       })),
+      rider_assignment: row.rider_info
+        ? {
+            rider_id: row.rider_info.rider_id,
+            rider_name: row.rider_info.rider_name || 'Rider',
+            assigned_at: row.rider_info.assigned_at,
+          }
+        : undefined,
     };
   }
 
@@ -441,10 +358,6 @@ export class OrderService {
       throw new Error('Supabase client is not configured.');
     }
 
-    // 1. Immediately record status override for cross-tab realtime synchronization
-    this.setStatusOverride(orderId, newStatus);
-
-    // Try RPC first
     const { error: rpcError } = await supabase.rpc('update_order_status_secure', {
       p_order_id: orderId,
       p_new_status: newStatus,
@@ -452,84 +365,32 @@ export class OrderService {
     });
 
     if (rpcError) {
-      // Direct table update fallback
-      const { error: directError } = await supabase
-        .from('orders')
-        .update({ status: newStatus, updated_at: new Date().toISOString() })
-        .eq('id', orderId);
-
-      if (!directError) {
-        await supabase.from('order_status_history').insert({
-          order_id: orderId,
-          to_status: newStatus,
-          notes: notes || `Order status marked ${newStatus}`,
-        });
-      }
+      throw new Error(`Database status update failed: ${rpcError.message}`);
     }
 
-    const fetched = await this.getOrderById(orderId).catch(() => null);
-    const updated: Order = fetched
-      ? { ...fetched, status: newStatus }
-      : {
-          id: orderId,
-          order_number: 'OK-ORDER',
-          branch_id: '',
-          customer_name: 'Customer',
-          customer_phone: '',
-          order_type: 'DINE_IN',
-          subtotal: 0,
-          delivery_fee: 0,
-          total_amount: 0,
-          payment_method: 'CASH',
-          payment_status: 'PENDING',
-          status: newStatus,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-          items: [],
-        };
+    const updated = await this.getOrderById(orderId);
+    if (!updated) {
+      throw new Error(`Failed to retrieve order ${orderId} after status update.`);
+    }
 
-    this.notify(updated);
     return updated;
   }
 
-  static async claimOrderForRider(orderId: string, riderId: string, riderName: string): Promise<boolean> {
+  static async claimOrderForRider(orderId: string, riderId: string, riderName?: string): Promise<boolean> {
     if (!supabase) {
       throw new Error('Supabase client is not configured.');
     }
 
-    this.setStatusOverride(orderId, 'ASSIGNED');
-
-    const isValidUuid = (id: string) =>
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
-
-    const safeRiderId = isValidUuid(riderId) ? riderId : '40000000-0000-0000-0000-000000000001';
-
     const { data, error } = await supabase.rpc('claim_delivery_order', {
       p_order_id: orderId,
-      p_rider_id: safeRiderId,
+      p_rider_id: riderId,
     });
 
-    if (error || !data) {
-      // Direct table fallback
-      const { error: assignError } = await supabase
-        .from('rider_assignments')
-        .insert({ order_id: orderId, rider_id: safeRiderId, status: 'ACCEPTED' });
-
-      if (assignError && !assignError.message.includes('unique')) {
-        return false;
-      }
-
-      await supabase
-        .from('orders')
-        .update({ status: 'ASSIGNED', updated_at: new Date().toISOString() })
-        .eq('id', orderId);
+    if (error) {
+      throw new Error(`Failed to claim order: ${error.message}`);
     }
 
-    const updated = await this.getOrderById(orderId);
-    if (updated) {
-      this.notify(updated);
-    }
-
-    return true;
+    return Boolean(data);
   }
 }
+
