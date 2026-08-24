@@ -14,20 +14,33 @@ export default function KitchenDisplaySystem() {
   useEffect(() => {
     BranchService.getBranches().then((b) => {
       setBranches(b);
-      if (b.length > 0) setSelectedBranchId(b[0].id);
     });
   }, []);
 
   useEffect(() => {
     loadKitchenOrders(selectedBranchId);
-    const unsubscribe = OrderService.subscribe(() => {
-      loadKitchenOrders(selectedBranchId);
+
+    const unsubscribe = OrderService.subscribe((updatedOrder) => {
+      setOrders((prev) => {
+        const exists = prev.some((o) => o.id === updatedOrder.id);
+        const isKitchenStatus = ['CONFIRMED', 'PREPARING', 'READY'].includes(updatedOrder.status);
+
+        if (isKitchenStatus) {
+          if (exists) {
+            return prev.map((o) => (o.id === updatedOrder.id ? { ...o, status: updatedOrder.status } : o));
+          } else {
+            return [updatedOrder, ...prev];
+          }
+        } else {
+          return prev.filter((o) => o.id !== updatedOrder.id);
+        }
+      });
     });
     return () => unsubscribe();
   }, [selectedBranchId]);
 
   async function loadKitchenOrders(branchId: string) {
-    const list = await OrderService.getOrders({ branchId });
+    const list = await OrderService.getOrders(branchId === 'all' ? undefined : { branchId });
     // Filter active kitchen orders
     setOrders(list.filter((o) => ['CONFIRMED', 'PREPARING', 'READY'].includes(o.status)));
   }
@@ -75,6 +88,7 @@ export default function KitchenDisplaySystem() {
                 onChange={(e) => setSelectedBranchId(e.target.value)}
                 className="bg-transparent text-xs font-bold text-white focus:outline-none"
               >
+                <option value="all" className="bg-slate-900">🌐 All Branches (All Kitchen Orders)</option>
                 {branches.map((b) => (
                   <option key={b.id} value={b.id} className="bg-slate-900">
                     {b.name}
