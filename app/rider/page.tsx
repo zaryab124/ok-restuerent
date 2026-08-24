@@ -8,7 +8,7 @@ import { OrderService } from '@/lib/services/order-service';
 export default function RiderPortal() {
   const [availableOrders, setAvailableOrders] = useState<Order[]>([]);
   const [myAssignedOrders, setMyAssignedOrders] = useState<Order[]>([]);
-  const [riderInfo] = useState({ id: 'u6', name: 'Ali Rider (Dera Delivery)', branchId: 'b1000000-0000-0000-0000-000000000001' });
+  const [riderInfo] = useState({ id: '40000000-0000-0000-0000-000000000001', name: 'Ali Rider (Dera Delivery)', branchId: 'b1000000-0000-0000-0000-000000000001' });
   const [message, setMessage] = useState<string | null>(null);
 
   useEffect(() => {
