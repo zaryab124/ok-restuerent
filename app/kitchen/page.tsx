@@ -33,7 +33,7 @@ export default function KitchenDisplaySystem() {
   }
 
   const handleUpdateStatus = async (orderId: string, nextStatus: OrderStatus) => {
-    // Optimistic UI update for instant response
+    // Optimistic UI update - updates state instantly and retains new status
     setOrders((prevOrders) =>
       prevOrders.map((o) => (o.id === orderId ? { ...o, status: nextStatus } : o))
     );
@@ -42,8 +42,6 @@ export default function KitchenDisplaySystem() {
       await OrderService.updateOrderStatus(orderId, nextStatus, 'kitchen-1', `Kitchen marked ${nextStatus}`);
     } catch (err) {
       console.error('Kitchen status update error:', err);
-    } finally {
-      loadKitchenOrders(selectedBranchId);
     }
   };
 

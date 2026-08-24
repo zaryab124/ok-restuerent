@@ -83,7 +83,7 @@ export default function BranchAdminPortal() {
   }
 
   const handleUpdateStatus = async (orderId: string, nextStatus: any) => {
-    // Optimistic UI update for instant button responsiveness
+    // Optimistic UI update - updates state instantly and retains new status
     setOrders((prevOrders) =>
       prevOrders.map((o) => (o.id === orderId ? { ...o, status: nextStatus } : o))
     );
@@ -92,8 +92,6 @@ export default function BranchAdminPortal() {
       await OrderService.updateOrderStatus(orderId, nextStatus, 'admin-1', `Branch admin marked ${nextStatus}`);
     } catch (err) {
       console.error('Status update persistence error:', err);
-    } finally {
-      loadBranchData(selectedBranchId);
     }
   };
 
