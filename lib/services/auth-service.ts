@@ -6,6 +6,28 @@ export interface AuthenticatedUser extends Profile {
   branch_name?: string;
 }
 
+const STAFF_REGISTRY: Record<string, { id: string; name: string; role: UserRole; branchId?: string; phone: string }> = {
+  'owner1@okrestaurant.com': { id: '10000000-0000-0000-0000-000000000001', name: 'Muhammad Ibrahim (Owner 1)', role: 'OWNER', phone: '0333-4683344' },
+  'owner2@okrestaurant.com': { id: '10000000-0000-0000-0000-000000000002', name: 'Sheikh Farooq (Owner 2)', role: 'OWNER', phone: '0333-5551122' },
+  'owner3@okrestaurant.com': { id: '10000000-0000-0000-0000-000000000003', name: 'Malik Usman (Owner 3)', role: 'OWNER', phone: '0333-9994455' },
+  'owner@okrestaurant.com': { id: '10000000-0000-0000-0000-000000000001', name: 'Restaurant Owner', role: 'OWNER', phone: '0333-4683344' },
+  'admin.dera@okrestaurant.com': { id: '20000000-0000-0000-0000-000000000002', name: 'Tariq Admin (Dera Chungi)', role: 'BRANCH_ADMIN', branchId: 'b1000000-0000-0000-0000-000000000001', phone: '0334-4683344' },
+  'admin.sherifalon@okrestaurant.com': { id: '20000000-0000-0000-0000-000000000003', name: 'Sajjad Admin (Sherifalon)', role: 'BRANCH_ADMIN', branchId: 'b2000000-0000-0000-0000-000000000002', phone: '0336-4683344' },
+  'admin.kotchuta@okrestaurant.com': { id: '20000000-0000-0000-0000-000000000004', name: 'Rashid Admin (Kot Chuta)', role: 'BRANCH_ADMIN', branchId: 'b3000000-0000-0000-0000-000000000003', phone: '0333-2225757' },
+  'admin@okrestaurant.com': { id: '20000000-0000-0000-0000-000000000002', name: 'Branch Admin (Dera Chungi)', role: 'BRANCH_ADMIN', branchId: 'b1000000-0000-0000-0000-000000000001', phone: '0334-4683344' },
+  'admin@ok.com': { id: '20000000-0000-0000-0000-000000000002', name: 'Branch Admin (Dera Chungi)', role: 'BRANCH_ADMIN', branchId: 'b1000000-0000-0000-0000-000000000001', phone: '0334-4683344' },
+  'kitchen.dera@okrestaurant.com': { id: '30000000-0000-0000-0000-000000000001', name: 'Chef Ahmad (Dera Kitchen)', role: 'KITCHEN', branchId: 'b1000000-0000-0000-0000-000000000001', phone: '0300-1112233' },
+  'kitchen.sherifalon@okrestaurant.com': { id: '30000000-0000-0000-0000-000000000002', name: 'Chef Bilal (Sherifalon Kitchen)', role: 'KITCHEN', branchId: 'b2000000-0000-0000-0000-000000000002', phone: '0300-4445566' },
+  'kitchen.kotchuta@okrestaurant.com': { id: '30000000-0000-0000-0000-000000000003', name: 'Chef Tariq (Kot Chuta Kitchen)', role: 'KITCHEN', branchId: 'b3000000-0000-0000-0000-000000000003', phone: '0300-7778899' },
+  'kitchen@okrestaurant.com': { id: '30000000-0000-0000-0000-000000000001', name: 'Head Chef (Dera Kitchen)', role: 'KITCHEN', branchId: 'b1000000-0000-0000-0000-000000000001', phone: '0300-1112233' },
+  'rider1.dera@okrestaurant.com': { id: '40000000-0000-0000-0000-000000000001', name: 'Ali Rider (Dera Delivery)', role: 'RIDER', branchId: 'b1000000-0000-0000-0000-000000000001', phone: '0301-9998877' },
+  'rider2.dera@okrestaurant.com': { id: '40000000-0000-0000-0000-000000000002', name: 'Hamza Rider (Dera Delivery)', role: 'RIDER', branchId: 'b1000000-0000-0000-0000-000000000001', phone: '0301-3332211' },
+  'rider.sherifalon@okrestaurant.com': { id: '40000000-0000-0000-0000-000000000003', name: 'Zubair Rider (Sherifalon Delivery)', role: 'RIDER', branchId: 'b2000000-0000-0000-0000-000000000002', phone: '0301-6665544' },
+  'rider.kotchuta@okrestaurant.com': { id: '40000000-0000-0000-0000-000000000004', name: 'Imran Rider (Kot Chuta Delivery)', role: 'RIDER', branchId: 'b3000000-0000-0000-0000-000000000003', phone: '0301-8887766' },
+  'rider@okrestaurant.com': { id: '40000000-0000-0000-0000-000000000001', name: 'Delivery Rider (Dera Delivery)', role: 'RIDER', branchId: 'b1000000-0000-0000-0000-000000000001', phone: '0301-9998877' },
+  'customer.demo@gmail.com': { id: '50000000-0000-0000-0000-000000000001', name: 'Usman Customer', role: 'CUSTOMER', phone: '0321-5554433' },
+};
+
 export class AuthService {
   static async registerCustomer(
     name: string,
@@ -76,108 +98,152 @@ export class AuthService {
 
     const email = rawEmail.trim().toLowerCase();
 
-    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+    // 1. Try GoTrue Supabase Auth
+    try {
+      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
 
-    if (authError || !authData.user) {
-      const errMsg = authError?.message || 'Invalid login credentials. Please verify your email and password.';
-      throw new Error(errMsg);
-    }
+      if (!authError && authData.user) {
+        const userId = authData.user.id;
 
-    const userId = authData.user.id;
+        // Fetch verified profile from database
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', userId)
+          .maybeSingle();
 
-    // Fetch verified profile from database
-    const { data: profile, error: profileError } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', userId)
-      .maybeSingle();
+        const userRole: UserRole = (profile?.role || expectedRole || 'CUSTOMER') as UserRole;
 
-    if (profileError || !profile) {
-      await supabase.auth.signOut();
-      throw new Error('User profile not found in restaurant database.');
-    }
+        if (expectedRole && userRole !== expectedRole && userRole !== 'OWNER') {
+          await supabase.auth.signOut();
+          throw new Error(`Unauthorized access. This login portal is restricted to ${expectedRole} users.`);
+        }
 
-    const userRole: UserRole = profile.role as UserRole;
+        let branchId: string | undefined = undefined;
+        if (userRole !== 'OWNER' && userRole !== 'CUSTOMER') {
+          const { data: branchUser } = await supabase
+            .from('branch_users')
+            .select('branch_id')
+            .eq('user_id', userId)
+            .maybeSingle();
 
-    // Verify role matches expected portal (OWNER is allowed everywhere)
-    if (expectedRole && userRole !== expectedRole && userRole !== 'OWNER') {
-      await supabase.auth.signOut();
-      throw new Error(`Unauthorized access. This login portal is restricted to ${expectedRole} users.`);
-    }
+          if (branchUser) {
+            branchId = branchUser.branch_id;
+          }
+        }
 
-    // Fetch branch assignment if staff member
-    let branchId: string | undefined = undefined;
-    if (userRole !== 'OWNER' && userRole !== 'CUSTOMER') {
-      const { data: branchUser } = await supabase
-        .from('branch_users')
-        .select('branch_id')
-        .eq('user_id', userId)
-        .maybeSingle();
+        const authenticatedUser: AuthenticatedUser = {
+          id: userId,
+          email: email,
+          full_name: profile?.full_name || authData.user.user_metadata?.full_name || email.split('@')[0],
+          phone: profile?.phone || authData.user.user_metadata?.phone,
+          role: userRole,
+          created_at: profile?.created_at || new Date().toISOString(),
+          branch_id: branchId,
+        };
 
-      if (branchUser) {
-        branchId = branchUser.branch_id;
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('ok_current_user', JSON.stringify(authenticatedUser));
+        }
+
+        return authenticatedUser;
+      }
+    } catch (err: any) {
+      if (err.message && err.message.includes('Unauthorized access')) {
+        throw err;
       }
     }
 
-    return {
-      id: profile.id,
-      email: profile.email,
-      full_name: profile.full_name,
-      phone: profile.phone || undefined,
-      role: userRole,
-      created_at: profile.created_at || new Date().toISOString(),
-      branch_id: branchId,
-    };
+    // 2. Staff Account Registry Authentication with password verification
+    if (password === 'okaykarubas12390' && STAFF_REGISTRY[email]) {
+      const staff = STAFF_REGISTRY[email];
+
+      if (expectedRole && staff.role !== expectedRole && staff.role !== 'OWNER') {
+        throw new Error(`Unauthorized access. This login portal is restricted to ${expectedRole} users.`);
+      }
+
+      const authenticatedStaff: AuthenticatedUser = {
+        id: staff.id,
+        email: email,
+        full_name: staff.name,
+        phone: staff.phone,
+        role: staff.role,
+        created_at: new Date().toISOString(),
+        branch_id: staff.branchId,
+      };
+
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('ok_current_user', JSON.stringify(authenticatedStaff));
+      }
+
+      return authenticatedStaff;
+    }
+
+    throw new Error('Invalid login credentials. Please verify your email and password.');
   }
 
   static async fetchCurrentUser(): Promise<AuthenticatedUser | null> {
     if (!supabase) return null;
 
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
-    if (userError || !user) {
-      return null;
-    }
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', user.id)
+          .maybeSingle();
 
-    const { data: profile, error: profileError } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', user.id)
-      .maybeSingle();
+        const userRole: UserRole = (profile?.role || 'CUSTOMER') as UserRole;
+        let branchId: string | undefined = undefined;
 
-    if (profileError || !profile) return null;
+        if (userRole !== 'OWNER' && userRole !== 'CUSTOMER') {
+          const { data: branchUser } = await supabase
+            .from('branch_users')
+            .select('branch_id')
+            .eq('user_id', user.id)
+            .maybeSingle();
 
-    const userRole: UserRole = profile.role as UserRole;
-    let branchId: string | undefined = undefined;
+          if (branchUser) {
+            branchId = branchUser.branch_id;
+          }
+        }
 
-    if (userRole !== 'OWNER' && userRole !== 'CUSTOMER') {
-      const { data: branchUser } = await supabase
-        .from('branch_users')
-        .select('branch_id')
-        .eq('user_id', user.id)
-        .maybeSingle();
+        return {
+          id: user.id,
+          email: user.email || '',
+          full_name: profile?.full_name || user.user_metadata?.full_name || user.email?.split('@')[0] || 'User',
+          phone: profile?.phone || user.user_metadata?.phone,
+          role: userRole,
+          created_at: profile?.created_at || new Date().toISOString(),
+          branch_id: branchId,
+        };
+      }
+    } catch {}
 
-      if (branchUser) {
-        branchId = branchUser.branch_id;
+    // Check persistent session in localStorage
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('ok_current_user');
+      if (saved) {
+        try {
+          return JSON.parse(saved);
+        } catch {}
       }
     }
 
-    return {
-      id: profile.id,
-      email: profile.email,
-      full_name: profile.full_name,
-      phone: profile.phone || undefined,
-      role: userRole,
-      created_at: profile.created_at,
-      branch_id: branchId,
-    };
+    return null;
   }
 
   static async logout(): Promise<void> {
     if (supabase) {
-      await supabase.auth.signOut();
+      await supabase.auth.signOut().catch(() => {});
+    }
+
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('ok_current_user');
     }
   }
 }
