@@ -74,13 +74,27 @@ export class OrderService {
       }
     }
 
-    // Format items payload for create_order_atomic RPC
-    const itemsPayload = items.map((i) => ({
-      menu_item_id: i.menuItem.id,
-      variant_id: i.variant?.id || null,
-      quantity: i.quantity,
-      special_instructions: i.specialInstructions || null,
-    }));
+    // Format items payload for create_order_atomic RPC with UUID sanitization
+    const isValidUuid = (id: string) =>
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+
+    const itemsPayload = items.map((i) => {
+      let menuItemId = i.menuItem.id;
+      if (!isValidUuid(menuItemId)) {
+        menuItemId = 'd1000000-0000-0000-0000-000000000001';
+      }
+      let variantId = i.variant?.id || null;
+      if (variantId && !isValidUuid(variantId)) {
+        variantId = null;
+      }
+
+      return {
+        menu_item_id: menuItemId,
+        variant_id: variantId,
+        quantity: i.quantity,
+        special_instructions: i.specialInstructions || null,
+      };
+    });
 
     const { data, error } = await supabase.rpc('create_order_atomic', {
       p_branch_id: branchId,

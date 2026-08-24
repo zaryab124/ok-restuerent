@@ -155,7 +155,7 @@ export default function CustomerHomePage() {
             {/* Promotional Deal Cards (June Deal & Royal Platter) with AI Photography */}
             <div className="lg:col-span-5 grid grid-cols-2 gap-4">
               <div
-                onClick={() => setSelectedItemForModal(menuItems.find((i) => i.id === 'm1') || menuItems[0])}
+                onClick={() => setSelectedItemForModal(menuItems.find((i) => i.id === 'd1000000-0000-0000-0000-000000000001') || menuItems[0])}
                 className="group relative h-48 rounded-2xl overflow-hidden border border-amber-500/40 cursor-pointer shadow-lg hover:border-amber-400 transition-all"
               >
                 <Image src="https://images.unsplash.com/photo-1513104890138-7c749659a591?w=600&auto=format&fit=crop&q=80" alt="June Deal" fill className="object-cover group-hover:scale-105 transition-transform duration-500" />
@@ -167,7 +167,7 @@ export default function CustomerHomePage() {
               </div>
 
               <div
-                onClick={() => setSelectedItemForModal(menuItems.find((i) => i.id === 'm2') || menuItems[1])}
+                onClick={() => setSelectedItemForModal(menuItems.find((i) => i.id === 'd1000000-0000-0000-0000-000000000002') || menuItems[1])}
                 className="group relative h-48 rounded-2xl overflow-hidden border border-amber-500/40 cursor-pointer shadow-lg hover:border-amber-400 transition-all"
               >
                 <Image src="https://images.unsplash.com/photo-1555939594-58d7cb561ad1?w=600&auto=format&fit=crop&q=80" alt="Royal Platter" fill className="object-cover group-hover:scale-105 transition-transform duration-500" />
