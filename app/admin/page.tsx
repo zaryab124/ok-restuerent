@@ -52,25 +52,27 @@ export default function BranchAdminPortal() {
   useEffect(() => {
     BranchService.getBranches().then((b) => {
       setBranches(b);
-      if (b.length > 0) setSelectedBranchId(b[0].id);
     });
   }, []);
 
   useEffect(() => {
     loadBranchData(selectedBranchId);
-    
-    const unsubscribe = OrderService.subscribe(() => {
-      loadBranchData(selectedBranchId);
+
+    const unsubscribe = OrderService.subscribe((updatedOrder) => {
+      setOrders((prev) =>
+        prev.map((o) => (o.id === updatedOrder.id ? { ...o, status: updatedOrder.status } : o))
+      );
     });
     return () => unsubscribe();
   }, [selectedBranchId]);
 
   async function loadBranchData(branchId: string) {
-    const oList = await OrderService.getOrders({ branchId });
-    const tList = await QRService.getTablesByBranch(branchId);
+    const oList = await OrderService.getOrders(branchId === 'all' ? undefined : { branchId });
+    const targetBranch = branchId === 'all' ? 'b1000000-0000-0000-0000-000000000001' : branchId;
+    const tList = await QRService.getTablesByBranch(targetBranch);
     const mList = await MenuService.getMenuItems();
     const cList = await MenuService.getCategories();
-    const bList = await BuffetService.getActiveBuffets(branchId);
+    const bList = await BuffetService.getActiveBuffets(targetBranch);
     if (bList.length > 0) {
       const bkList = await BuffetService.getBookingsForBuffet(bList[0].id);
       setBuffetBookings(bkList);
@@ -223,6 +225,7 @@ export default function BranchAdminPortal() {
               onChange={(e) => setSelectedBranchId(e.target.value)}
               className="bg-slate-950 border border-slate-800 text-xs font-bold text-amber-400 px-3 py-2 rounded-xl focus:outline-none"
             >
+              <option value="all">🌐 All Branches (All Orders)</option>
               {branches.map((b) => (
                 <option key={b.id} value={b.id}>
                   {b.name}
