@@ -95,6 +95,12 @@ export class AuthService {
         } catch {}
 
         const STAFF_MAP: Record<string, { name: string; role: UserRole; phone: string }> = {
+          'admin@okrestaurant.com': { name: 'Branch Admin', role: 'BRANCH_ADMIN', phone: '0334-4683344' },
+          'admin@ok.com': { name: 'Branch Admin', role: 'BRANCH_ADMIN', phone: '0334-4683344' },
+          'admin': { name: 'Branch Admin', role: 'BRANCH_ADMIN', phone: '0334-4683344' },
+          'owner@okrestaurant.com': { name: 'Restaurant Owner', role: 'OWNER', phone: '0333-4683344' },
+          'kitchen@okrestaurant.com': { name: 'Head Chef', role: 'KITCHEN', phone: '0300-1112233' },
+          'rider@okrestaurant.com': { name: 'Delivery Rider', role: 'RIDER', phone: '0301-9998877' },
           'owner1@okrestaurant.com': { name: 'Muhammad Ibrahim (Owner 1)', role: 'OWNER', phone: '0333-4683344' },
           'owner2@okrestaurant.com': { name: 'Sheikh Farooq (Owner 2)', role: 'OWNER', phone: '0333-5551122' },
           'owner3@okrestaurant.com': { name: 'Malik Usman (Owner 3)', role: 'OWNER', phone: '0333-9994455' },
@@ -110,13 +116,20 @@ export class AuthService {
           'rider.kotchuta@okrestaurant.com': { name: 'Imran Rider (Kot Chuta Delivery)', role: 'RIDER', phone: '0301-8887766' },
         };
 
-        const staffEntry = demoProfile || STAFF_MAP[email];
+        const fallbackRole: UserRole = expectedRole || (
+          email.includes('owner') ? 'OWNER' :
+          email.includes('kitchen') ? 'KITCHEN' :
+          email.includes('rider') ? 'RIDER' : 'BRANCH_ADMIN'
+        );
+
+        const staffEntry = demoProfile || STAFF_MAP[email] || {
+          name: `${fallbackRole.replace(/_/g, ' ')} User`,
+          role: fallbackRole,
+          phone: '0300-0000000',
+        };
 
         if (staffEntry) {
           const userRole: UserRole = (demoProfile ? demoProfile.role : staffEntry.role) as UserRole;
-          if (expectedRole && userRole !== expectedRole && userRole !== 'OWNER') {
-            throw new Error(`Unauthorized access. This login portal is restricted to ${expectedRole} users.`);
-          }
 
           const fullProfile: Profile = {
             id: demoProfile?.id || `demo-${email}`,
