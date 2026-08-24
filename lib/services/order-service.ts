@@ -414,33 +414,29 @@ export class OrderService {
       }
     }
 
-    const updated = await this.getOrderById(orderId);
-    if (updated) {
-      this.notify(updated);
-      return updated;
-    }
+    const fetched = await this.getOrderById(orderId).catch(() => null);
+    const updated: Order = fetched
+      ? { ...fetched, status: newStatus }
+      : {
+          id: orderId,
+          order_number: 'OK-ORDER',
+          branch_id: '',
+          customer_name: 'Customer',
+          customer_phone: '',
+          order_type: 'DINE_IN',
+          subtotal: 0,
+          delivery_fee: 0,
+          total_amount: 0,
+          payment_method: 'CASH',
+          payment_status: 'PENDING',
+          status: newStatus,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          items: [],
+        };
 
-    // Memory fallback order for instant UI response
-    const fallbackOrder: Order = {
-      id: orderId,
-      order_number: 'OK-ORDER',
-      branch_id: '',
-      customer_name: 'Customer',
-      customer_phone: '',
-      order_type: 'DINE_IN',
-      subtotal: 0,
-      delivery_fee: 0,
-      total_amount: 0,
-      payment_method: 'CASH',
-      payment_status: 'PENDING',
-      status: newStatus,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      items: [],
-    };
-
-    this.notify(fallbackOrder);
-    return fallbackOrder;
+    this.notify(updated);
+    return updated;
   }
 
   static async claimOrderForRider(orderId: string, riderId: string, riderName: string): Promise<boolean> {
