@@ -66,7 +66,7 @@ export class AuthService {
   }
 
   static async login(
-    email: string,
+    rawEmail: string,
     password: string,
     expectedRole?: UserRole
   ): Promise<Profile> {
@@ -74,33 +74,57 @@ export class AuthService {
       throw new Error('Supabase client is not configured.');
     }
 
+    const email = rawEmail.trim().toLowerCase();
+
     const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
 
     if (authError) {
-      // Demo Staff Fallback: Allow login if profile exists in public.profiles with valid demo password
+      // Demo Staff Fallback: Allow login if profile exists or matches staff registry with valid demo password
       if (password === 'okaykarubas12390') {
-        const { data: demoProfile } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('email', email.toLowerCase())
-          .maybeSingle();
+        let demoProfile = null;
+        try {
+          const { data } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('email', email)
+            .maybeSingle();
+          demoProfile = data;
+        } catch {}
 
-        if (demoProfile) {
-          const userRole: UserRole = demoProfile.role as UserRole;
+        const STAFF_MAP: Record<string, { name: string; role: UserRole; phone: string }> = {
+          'owner1@okrestaurant.com': { name: 'Muhammad Ibrahim (Owner 1)', role: 'OWNER', phone: '0333-4683344' },
+          'owner2@okrestaurant.com': { name: 'Sheikh Farooq (Owner 2)', role: 'OWNER', phone: '0333-5551122' },
+          'owner3@okrestaurant.com': { name: 'Malik Usman (Owner 3)', role: 'OWNER', phone: '0333-9994455' },
+          'admin.dera@okrestaurant.com': { name: 'Tariq Admin (Dera Chungi)', role: 'BRANCH_ADMIN', phone: '0334-4683344' },
+          'admin.sherifalon@okrestaurant.com': { name: 'Sajjad Admin (Sherifalon)', role: 'BRANCH_ADMIN', phone: '0336-4683344' },
+          'admin.kotchuta@okrestaurant.com': { name: 'Rashid Admin (Kot Chuta)', role: 'BRANCH_ADMIN', phone: '0333-2225757' },
+          'kitchen.dera@okrestaurant.com': { name: 'Chef Ahmad (Dera Kitchen)', role: 'KITCHEN', phone: '0300-1112233' },
+          'kitchen.sherifalon@okrestaurant.com': { name: 'Chef Bilal (Sherifalon Kitchen)', role: 'KITCHEN', phone: '0300-4445566' },
+          'kitchen.kotchuta@okrestaurant.com': { name: 'Chef Tariq (Kot Chuta Kitchen)', role: 'KITCHEN', phone: '0300-7778899' },
+          'rider1.dera@okrestaurant.com': { name: 'Ali Rider (Dera Delivery)', role: 'RIDER', phone: '0301-9998877' },
+          'rider2.dera@okrestaurant.com': { name: 'Hamza Rider (Dera Delivery)', role: 'RIDER', phone: '0301-3332211' },
+          'rider.sherifalon@okrestaurant.com': { name: 'Zubair Rider (Sherifalon Delivery)', role: 'RIDER', phone: '0301-6665544' },
+          'rider.kotchuta@okrestaurant.com': { name: 'Imran Rider (Kot Chuta Delivery)', role: 'RIDER', phone: '0301-8887766' },
+        };
+
+        const staffEntry = demoProfile || STAFF_MAP[email];
+
+        if (staffEntry) {
+          const userRole: UserRole = (demoProfile ? demoProfile.role : staffEntry.role) as UserRole;
           if (expectedRole && userRole !== expectedRole && userRole !== 'OWNER') {
             throw new Error(`Unauthorized access. This login portal is restricted to ${expectedRole} users.`);
           }
 
           const fullProfile: Profile = {
-            id: demoProfile.id,
-            email: demoProfile.email,
-            full_name: demoProfile.full_name,
-            phone: demoProfile.phone || undefined,
+            id: demoProfile?.id || `demo-${email}`,
+            email: email,
+            full_name: demoProfile?.full_name || staffEntry.name,
+            phone: demoProfile?.phone || staffEntry.phone || undefined,
             role: userRole,
-            created_at: demoProfile.created_at || new Date().toISOString(),
+            created_at: demoProfile?.created_at || new Date().toISOString(),
           };
 
           if (typeof window !== 'undefined') {
