@@ -1,6 +1,5 @@
 import { Order, OrderStatus, OrderType, CartItem, PaymentMethod } from '../types';
 import { supabase } from '../supabase/client';
-import { PaymentService } from './payment-service';
 import { BranchService } from './branch-service';
 
 export class OrderService {
@@ -184,11 +183,30 @@ export class OrderService {
     if (filter?.customerPhone) {
       query = query.eq('customer_phone', filter.customerPhone);
     }
+    if (filter?.riderId) {
+      query = query.eq('rider_assignments.rider_id', filter.riderId);
+    }
 
-    const { data, error } = await query;
+    let { data, error } = await query;
 
     if (error) {
-      throw new Error(`Failed to fetch orders: ${error.message}`);
+      // Fallback: try simpler query without joins (may fail due to RLS on related tables)
+      let fallbackQuery = supabase
+        .from('orders')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (filter?.branchId) fallbackQuery = fallbackQuery.eq('branch_id', filter.branchId);
+      if (filter?.status) fallbackQuery = fallbackQuery.eq('status', filter.status);
+      if (filter?.customerPhone) fallbackQuery = fallbackQuery.eq('customer_phone', filter.customerPhone);
+
+      const fallbackResult = await fallbackQuery;
+      data = fallbackResult.data;
+      error = fallbackResult.error;
+    }
+
+    if (error || !data) {
+      return [];
     }
 
     return (data || []).map((o: any) => {

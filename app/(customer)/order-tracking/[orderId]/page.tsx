@@ -48,7 +48,6 @@ export default function OrderTrackingPage({ params }: { params: { orderId: strin
   }, [params.orderId]);
 
   if (loading) {
-    aria: "Loading Order Details";
     return (
       <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center">
         <div className="flex items-center gap-3 text-amber-400 font-bold text-sm">

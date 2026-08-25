@@ -165,8 +165,52 @@ export class AuthService {
         throw new Error(`Unauthorized access. This login portal is restricted to ${expectedRole} users.`);
       }
 
+      // Try to provision this staff user into Supabase Auth so RLS works
+      let realUserId = staff.id; // fallback to registry ID
+
+      if (supabase) {
+        try {
+          // Attempt signUp (will succeed first time, fail gracefully if already exists)
+          const { data: signUpData } = await supabase.auth.signUp({
+            email,
+            password,
+            options: { data: { full_name: staff.name, phone: staff.phone } },
+          });
+
+          // Try to sign in to get a real session
+          const { data: signInData } = await supabase.auth.signInWithPassword({ email, password }).catch(() => ({ data: null }));
+          
+          // Use real Supabase user ID if available
+          const authUser = signInData?.user || signUpData?.user;
+          if (authUser?.id) {
+            realUserId = authUser.id;
+          }
+
+          // Seed profile using real user ID so RPCs (auth.uid()) match
+          try {
+            await supabase.from('profiles').upsert({
+              id: realUserId,
+              email: email,
+              full_name: staff.name,
+              phone: staff.phone,
+              role: staff.role,
+            }, { onConflict: 'id' });
+          } catch {}
+
+          if (staff.branchId) {
+            try {
+              await supabase.from('branch_users').upsert({
+                user_id: realUserId,
+                branch_id: staff.branchId,
+                role: staff.role,
+              }, { onConflict: 'user_id,branch_id' });
+            } catch {}
+          }
+        } catch {}
+      }
+
       const authenticatedStaff: AuthenticatedUser = {
-        id: staff.id,
+        id: realUserId,
         email: email,
         full_name: staff.name,
         phone: staff.phone,

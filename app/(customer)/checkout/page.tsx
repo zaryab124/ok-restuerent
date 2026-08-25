@@ -26,6 +26,13 @@ export default function CheckoutPage() {
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [copiedText, setCopiedText] = useState<string | null>(null);
+  const [isDeliverySupported, setIsDeliverySupported] = useState<boolean>(true);
+
+  useEffect(() => {
+    BranchService.isDeliveryAllowed(selectedBranchId)
+      .then((v) => setIsDeliverySupported(v))
+      .catch(() => setIsDeliverySupported(false));
+  }, [selectedBranchId]);
 
   useEffect(() => {
     BranchService.getBranches().then((bList) => {
@@ -57,7 +64,6 @@ export default function CheckoutPage() {
   }, []);
 
   const activeBranch = branches.find((b) => b.id === selectedBranchId);
-  const isDeliverySupported = BranchService.isDeliveryAllowed(selectedBranchId);
 
   const subtotal = cart.reduce((sum, item) => {
     const price = item.variant ? item.variant.price : item.menuItem.base_price;
@@ -113,7 +119,7 @@ export default function CheckoutPage() {
 
       localStorage.removeItem('ok_cart');
       localStorage.removeItem('ok_qr_session');
-      router.push(`/order-tracking/${order.id}`);
+      router.push(`/order-tracking/${order.tracking_token || order.id}`);
     } catch (err: any) {
       setError(err.message || 'Failed to submit order.');
       setSubmitting(false);
