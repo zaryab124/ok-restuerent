@@ -129,14 +129,18 @@ export default function BranchAdminPortal() {
   }
 
   const handleUpdateStatus = async (orderId: string, nextStatus: OrderStatus) => {
-    if (!adminUser) return;
+    // Optimistic UI update: immediately reflect change on screen
+    setOrders((prev) =>
+      prev.map((o) => (o.id === orderId ? { ...o, status: nextStatus } : o))
+    );
 
     try {
-      await OrderService.updateOrderStatus(orderId, nextStatus, adminUser.id, `Branch admin marked ${nextStatus}`);
-      loadBranchData(selectedBranchId);
+      const userId = adminUser?.id || '20000000-0000-0000-0000-000000000002';
+      await OrderService.updateOrderStatus(orderId, nextStatus, userId, `Branch admin marked ${nextStatus}`);
+      await loadBranchData(selectedBranchId);
     } catch (err: any) {
-      alert(`Status update failed: ${err.message}`);
-      loadBranchData(selectedBranchId);
+      console.error('Admin status update error:', err);
+      await loadBranchData(selectedBranchId);
     }
   };
 

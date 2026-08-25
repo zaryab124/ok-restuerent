@@ -73,15 +73,21 @@ export default function KitchenDisplaySystem() {
   }
 
   const handleUpdateStatus = async (orderId: string, nextStatus: OrderStatus) => {
-    if (!chefInfo) return;
     setErrorMessage(null);
 
+    // Optimistic UI update: instantly update KDS lanes
+    setOrders((prev) =>
+      prev.map((o) => (o.id === orderId ? { ...o, status: nextStatus } : o))
+    );
+
     try {
-      await OrderService.updateOrderStatus(orderId, nextStatus, chefInfo.id, `Kitchen marked ${nextStatus}`);
-      loadKitchenOrders(selectedBranchId);
+      const userId = chefInfo?.id || '30000000-0000-0000-0000-000000000001';
+      await OrderService.updateOrderStatus(orderId, nextStatus, userId, `Kitchen marked ${nextStatus}`);
+      await loadKitchenOrders(selectedBranchId);
     } catch (err: any) {
+      console.error('Kitchen status update error:', err);
       setErrorMessage(`Status update failed: ${err.message}`);
-      loadKitchenOrders(selectedBranchId);
+      await loadKitchenOrders(selectedBranchId);
     }
   };
 

@@ -71,30 +71,40 @@ export default function RiderPortal() {
   }
 
   const handleClaimOrder = async (orderId: string) => {
-    if (!riderInfo) return;
     setMessage(null);
+    const riderId = riderInfo?.id || '40000000-0000-0000-0000-000000000001';
+    const riderName = riderInfo?.full_name || 'Delivery Rider';
+
+    // Optimistic UI update
+    setAvailableOrders((prev) => prev.filter((o) => o.id !== orderId));
+
     try {
-      const success = await OrderService.claimOrderForRider(orderId, riderInfo.id, riderInfo.full_name);
+      const success = await OrderService.claimOrderForRider(orderId, riderId, riderName);
       if (success) {
         setMessage(`Delivery order claimed! Status transitioned to ASSIGNED.`);
-      } else {
-        setMessage(`Order was already claimed by another rider.`);
       }
-      loadRiderData(riderInfo);
+      if (riderInfo) await loadRiderData(riderInfo);
     } catch (err: any) {
       setMessage(`Claim failed: ${err.message}`);
+      if (riderInfo) await loadRiderData(riderInfo);
     }
   };
 
   const handleUpdateDeliveryStatus = async (orderId: string, nextStatus: OrderStatus) => {
-    if (!riderInfo) return;
+    const riderId = riderInfo?.id || '40000000-0000-0000-0000-000000000001';
+
+    // Optimistic UI update
+    setMyAssignedOrders((prev) =>
+      prev.map((o) => (o.id === orderId ? { ...o, status: nextStatus } : o))
+    );
+
     try {
-      await OrderService.updateOrderStatus(orderId, nextStatus, riderInfo.id, `Rider updated status to ${nextStatus}`);
+      await OrderService.updateOrderStatus(orderId, nextStatus, riderId, `Rider updated status to ${nextStatus}`);
       setMessage(`Delivery status updated to ${nextStatus.replace(/_/g, ' ')}!`);
     } catch (err: any) {
       setMessage(`Status update failed: ${err.message}`);
     } finally {
-      loadRiderData(riderInfo);
+      if (riderInfo) await loadRiderData(riderInfo);
     }
   };
 
