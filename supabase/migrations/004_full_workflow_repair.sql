@@ -40,7 +40,13 @@ EXCEPTION WHEN OTHERS THEN
     NULL;
 END $$;
 
--- 3. Universal Get Branch Orders RPC (Guarantees Admin, Kitchen & Rider Portals Load Real Orders)
+-- 3. Drop existing versions to allow clean signature updates
+DROP FUNCTION IF EXISTS public.get_order_by_tracking_token(UUID);
+DROP FUNCTION IF EXISTS public.get_order_by_identifier(TEXT);
+DROP FUNCTION IF EXISTS public.get_branch_orders(UUID, TEXT);
+DROP FUNCTION IF EXISTS public.update_order_status_direct(UUID, TEXT, UUID, TEXT);
+
+-- 4. Universal Get Branch Orders RPC (Guarantees Admin, Kitchen & Rider Portals Load Real Orders)
 CREATE OR REPLACE FUNCTION public.get_branch_orders(
     p_branch_id UUID DEFAULT NULL,
     p_status TEXT DEFAULT NULL
@@ -130,7 +136,7 @@ END;
 $$;
 GRANT EXECUTE ON FUNCTION public.get_branch_orders(UUID, TEXT) TO anon, authenticated, service_role;
 
--- 4. Universal Order Identifier Resolver RPC (For Customer Tracking by Token or Order Number)
+-- 5. Universal Order Identifier Resolver RPC (For Customer Tracking by Token or Order Number)
 CREATE OR REPLACE FUNCTION public.get_order_by_identifier(p_identifier TEXT)
 RETURNS TABLE (
     order_id UUID,
@@ -257,7 +263,7 @@ END;
 $$;
 GRANT EXECUTE ON FUNCTION public.get_order_by_tracking_token(UUID) TO anon, authenticated, service_role;
 
--- 5. Staff Profile Sync RPC
+-- 6. Staff Profile Sync RPC
 CREATE OR REPLACE FUNCTION public.sync_staff_profile(
     p_role TEXT,
     p_branch_id UUID DEFAULT NULL,
@@ -306,7 +312,7 @@ END;
 $$;
 GRANT EXECUTE ON FUNCTION public.sync_staff_profile(TEXT, UUID, TEXT, TEXT) TO authenticated, service_role;
 
--- 6. Direct Order Status Update with Full History
+-- 7. Direct Order Status Update with Full History
 CREATE OR REPLACE FUNCTION public.update_order_status_direct(
     p_order_id UUID,
     p_new_status TEXT,
@@ -341,7 +347,7 @@ END;
 $$;
 GRANT EXECUTE ON FUNCTION public.update_order_status_direct(UUID, TEXT, UUID, TEXT) TO anon, authenticated, service_role;
 
--- 7. Ensure Open Read Permissions on Orders for Dashboard Reliability
+-- 8. Ensure Open Read Permissions on Orders for Dashboard Reliability
 DROP POLICY IF EXISTS "orders_select_policy" ON public.orders;
 CREATE POLICY "orders_select_policy" ON public.orders FOR SELECT USING (true);
 
@@ -360,7 +366,7 @@ CREATE POLICY "rider_assignments_insert_policy" ON public.rider_assignments FOR 
 DROP POLICY IF EXISTS "rider_assignments_update_policy" ON public.rider_assignments;
 CREATE POLICY "rider_assignments_update_policy" ON public.rider_assignments FOR UPDATE USING (true);
 
--- 8. Supabase Realtime Publication Verification
+-- 9. Supabase Realtime Publication Verification
 DO $$
 BEGIN
     BEGIN
