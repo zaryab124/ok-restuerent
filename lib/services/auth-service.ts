@@ -97,8 +97,10 @@ export class AuthService {
     }
 
     const email = rawEmail.trim().toLowerCase();
+    const staffConfig = STAFF_REGISTRY[email];
 
-    // 1. Try GoTrue Supabase Auth
+    // 1. Try GoTrue Supabase Auth directly first
+    let authUser: any = null;
     try {
       const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
         email,
@@ -106,127 +108,87 @@ export class AuthService {
       });
 
       if (!authError && authData.user) {
-        const userId = authData.user.id;
+        authUser = authData.user;
+      }
+    } catch {}
 
-        // Fetch verified profile from database
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', userId)
-          .maybeSingle();
+    // 2. If not authenticated in GoTrue, check staff registry and auto-provision in Supabase
+    if (!authUser && staffConfig && password === 'okaykarubas12390') {
+      try {
+        await supabase.auth.signUp({
+          email,
+          password,
+          options: { data: { full_name: staffConfig.name, phone: staffConfig.phone } },
+        }).catch(() => {});
 
-        const userRole: UserRole = (profile?.role || expectedRole || 'CUSTOMER') as UserRole;
+        const { data: signInData } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        }).catch(() => ({ data: null }));
 
-        if (expectedRole && userRole !== expectedRole && userRole !== 'OWNER') {
-          await supabase.auth.signOut();
-          throw new Error(`Unauthorized access. This login portal is restricted to ${expectedRole} users.`);
+        if (signInData?.user) {
+          authUser = signInData.user;
         }
+      } catch {}
+    }
 
-        let branchId: string | undefined = undefined;
-        if (userRole !== 'OWNER' && userRole !== 'CUSTOMER') {
-          const { data: branchUser } = await supabase
-            .from('branch_users')
-            .select('branch_id')
-            .eq('user_id', userId)
-            .maybeSingle();
+    // 3. Resolve role and permissions
+    const effectiveRole: UserRole = staffConfig?.role || expectedRole || 'CUSTOMER';
+    const effectiveBranchId = staffConfig?.branchId;
+    const effectiveName = staffConfig?.name || authUser?.user_metadata?.full_name || email.split('@')[0];
+    const effectivePhone = staffConfig?.phone || authUser?.user_metadata?.phone || '';
+    const resolvedUserId = authUser?.id || staffConfig?.id || '00000000-0000-0000-0000-000000000000';
 
-          if (branchUser) {
-            branchId = branchUser.branch_id;
-          }
-        }
+    if (expectedRole && effectiveRole !== expectedRole && effectiveRole !== 'OWNER') {
+      if (authUser) await supabase.auth.signOut().catch(() => {});
+      throw new Error(`Unauthorized access. This login portal is restricted to ${expectedRole} users.`);
+    }
 
-        const authenticatedUser: AuthenticatedUser = {
-          id: userId,
+    // 4. Self-heal database profiles and branch_users if authenticated
+    if (authUser && staffConfig) {
+      try {
+        await supabase.from('profiles').upsert({
+          id: authUser.id,
           email: email,
-          full_name: profile?.full_name || authData.user.user_metadata?.full_name || email.split('@')[0],
-          phone: profile?.phone || authData.user.user_metadata?.phone,
-          role: userRole,
-          created_at: profile?.created_at || new Date().toISOString(),
-          branch_id: branchId,
-        };
+          full_name: effectiveName,
+          phone: effectivePhone,
+          role: effectiveRole,
+        }, { onConflict: 'id' });
 
-        if (typeof window !== 'undefined') {
-          localStorage.setItem('ok_current_user', JSON.stringify(authenticatedUser));
+        if (effectiveBranchId) {
+          await supabase.from('branch_users').upsert({
+            user_id: authUser.id,
+            branch_id: effectiveBranchId,
+            role: effectiveRole,
+          }, { onConflict: 'user_id,branch_id' });
         }
-
-        return authenticatedUser;
-      }
-    } catch (err: any) {
-      if (err.message && err.message.includes('Unauthorized access')) {
-        throw err;
-      }
+      } catch {}
     }
 
-    // 2. Staff Account Registry Authentication with password verification
-    if (password === 'okaykarubas12390' && STAFF_REGISTRY[email]) {
-      const staff = STAFF_REGISTRY[email];
-
-      if (expectedRole && staff.role !== expectedRole && staff.role !== 'OWNER') {
-        throw new Error(`Unauthorized access. This login portal is restricted to ${expectedRole} users.`);
-      }
-
-      // Try to provision this staff user into Supabase Auth so RLS works
-      let realUserId = staff.id; // fallback to registry ID
-
-      if (supabase) {
-        try {
-          // Attempt signUp (will succeed first time, fail gracefully if already exists)
-          const { data: signUpData } = await supabase.auth.signUp({
-            email,
-            password,
-            options: { data: { full_name: staff.name, phone: staff.phone } },
-          });
-
-          // Try to sign in to get a real session
-          const { data: signInData } = await supabase.auth.signInWithPassword({ email, password }).catch(() => ({ data: null }));
-          
-          // Use real Supabase user ID if available
-          const authUser = signInData?.user || signUpData?.user;
-          if (authUser?.id) {
-            realUserId = authUser.id;
-          }
-
-          // Seed profile using real user ID so RPCs (auth.uid()) match
-          try {
-            await supabase.from('profiles').upsert({
-              id: realUserId,
-              email: email,
-              full_name: staff.name,
-              phone: staff.phone,
-              role: staff.role,
-            }, { onConflict: 'id' });
-          } catch {}
-
-          if (staff.branchId) {
-            try {
-              await supabase.from('branch_users').upsert({
-                user_id: realUserId,
-                branch_id: staff.branchId,
-                role: staff.role,
-              }, { onConflict: 'user_id,branch_id' });
-            } catch {}
-          }
-        } catch {}
-      }
-
-      const authenticatedStaff: AuthenticatedUser = {
-        id: realUserId,
-        email: email,
-        full_name: staff.name,
-        phone: staff.phone,
-        role: staff.role,
-        created_at: new Date().toISOString(),
-        branch_id: staff.branchId,
-      };
-
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('ok_current_user', JSON.stringify(authenticatedStaff));
-      }
-
-      return authenticatedStaff;
+    // 5. If neither GoTrue nor valid staff registry matched
+    if (!authUser && !staffConfig) {
+      throw new Error('Invalid login credentials. Please verify your email and password.');
     }
 
-    throw new Error('Invalid login credentials. Please verify your email and password.');
+    if (!authUser && staffConfig && password !== 'okaykarubas12390') {
+      throw new Error('Invalid password. Please check your credentials.');
+    }
+
+    const authenticatedUser: AuthenticatedUser = {
+      id: resolvedUserId,
+      email: email,
+      full_name: effectiveName,
+      phone: effectivePhone,
+      role: effectiveRole,
+      created_at: new Date().toISOString(),
+      branch_id: effectiveBranchId,
+    };
+
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('ok_current_user', JSON.stringify(authenticatedUser));
+    }
+
+    return authenticatedUser;
   }
 
   static async fetchCurrentUser(): Promise<AuthenticatedUser | null> {
@@ -234,17 +196,20 @@ export class AuthService {
 
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
+      if (user && user.email) {
+        const email = user.email.toLowerCase();
+        const staffConfig = STAFF_REGISTRY[email];
+
         const { data: profile } = await supabase
           .from('profiles')
           .select('*')
           .eq('id', user.id)
           .maybeSingle();
 
-        const userRole: UserRole = (profile?.role || 'CUSTOMER') as UserRole;
-        let branchId: string | undefined = undefined;
+        const userRole: UserRole = (profile?.role || staffConfig?.role || 'CUSTOMER') as UserRole;
+        let branchId: string | undefined = staffConfig?.branchId;
 
-        if (userRole !== 'OWNER' && userRole !== 'CUSTOMER') {
+        if (!branchId && userRole !== 'OWNER' && userRole !== 'CUSTOMER') {
           const { data: branchUser } = await supabase
             .from('branch_users')
             .select('branch_id')
@@ -256,11 +221,32 @@ export class AuthService {
           }
         }
 
+        // Auto-heal if staff profile is missing in DB
+        if (staffConfig && (!profile || profile.role !== staffConfig.role)) {
+          try {
+            await supabase.from('profiles').upsert({
+              id: user.id,
+              email: email,
+              full_name: profile?.full_name || staffConfig.name,
+              phone: profile?.phone || staffConfig.phone,
+              role: staffConfig.role,
+            }, { onConflict: 'id' });
+
+            if (staffConfig.branchId) {
+              await supabase.from('branch_users').upsert({
+                user_id: user.id,
+                branch_id: staffConfig.branchId,
+                role: staffConfig.role,
+              }, { onConflict: 'user_id,branch_id' });
+            }
+          } catch {}
+        }
+
         return {
           id: user.id,
-          email: user.email || '',
-          full_name: profile?.full_name || user.user_metadata?.full_name || user.email?.split('@')[0] || 'User',
-          phone: profile?.phone || user.user_metadata?.phone,
+          email: user.email,
+          full_name: profile?.full_name || staffConfig?.name || user.user_metadata?.full_name || user.email.split('@')[0],
+          phone: profile?.phone || staffConfig?.phone || user.user_metadata?.phone,
           role: userRole,
           created_at: profile?.created_at || new Date().toISOString(),
           branch_id: branchId,

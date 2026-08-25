@@ -295,6 +295,13 @@ export class OrderService {
 
     const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
 
+    // 1. Try public tracking token RPC first if it's a UUID (works unconditionally for customer tracking)
+    if (isUuid) {
+      const rpcOrder = await this.getOrderByTrackingToken(id).catch(() => null);
+      if (rpcOrder) return rpcOrder;
+    }
+
+    // 2. Direct query for authenticated staff / admin users
     let query = supabase
       .from('orders')
       .select('*, items:order_items(*), history:order_status_history(*), rider_assignment:rider_assignments(*)');
