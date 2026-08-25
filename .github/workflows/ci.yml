@@ -25,8 +25,14 @@ jobs:
 
       - name: Run Jest Automated Tests
         run: npm test
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: https://dzdclfqvwlpzehssryfi.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: sb_publishable_SF6tRFkA3qCkZXjtD5yugQ_g1FFctP_
+          NEXT_PUBLIC_APP_URL: https://ok-restuerent.vercel.app
 
       - name: Verify Next.js Production Build
         run: npm run build
         env:
-          NEXT_PUBLIC_APP_URL: https://okrestaurant.com
+          NEXT_PUBLIC_SUPABASE_URL: https://dzdclfqvwlpzehssryfi.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: sb_publishable_SF6tRFkA3qCkZXjtD5yugQ_g1FFctP_
+          NEXT_PUBLIC_APP_URL: https://ok-restuerent.vercel.app
