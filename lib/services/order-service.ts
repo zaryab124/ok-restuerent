@@ -194,12 +194,31 @@ export class OrderService {
       throw new Error('Supabase client is not configured.');
     }
 
+    // 1. Try get_branch_orders RPC (Security Definer, reliable for staff portals)
+    try {
+      const { data: rpcData, error: rpcErr } = await supabase.rpc('get_branch_orders', {
+        p_branch_id: filter?.branchId && filter.branchId !== 'all' ? filter.branchId : null,
+        p_status: filter?.status || null,
+      });
+
+      if (!rpcErr && rpcData && Array.isArray(rpcData) && rpcData.length > 0) {
+        let results = rpcData.map((row: any) => this.mapRpcOrderRow(row));
+        if (filter?.customerPhone) {
+          results = results.filter((o) => o.customer_phone === filter.customerPhone);
+        }
+        if (filter?.riderId) {
+          results = results.filter((o) => o.rider_assignment?.rider_id === filter.riderId);
+        }
+        return results;
+      }
+    } catch {}
+
     let query = supabase
       .from('orders')
       .select('*, items:order_items(*), history:order_status_history(*), rider_assignment:rider_assignments(*)')
       .order('created_at', { ascending: false });
 
-    if (filter?.branchId) {
+    if (filter?.branchId && filter.branchId !== 'all') {
       query = query.eq('branch_id', filter.branchId);
     }
     if (filter?.status) {
@@ -221,7 +240,7 @@ export class OrderService {
         .select('*')
         .order('created_at', { ascending: false });
 
-      if (filter?.branchId) fallbackQuery = fallbackQuery.eq('branch_id', filter.branchId);
+      if (filter?.branchId && filter.branchId !== 'all') fallbackQuery = fallbackQuery.eq('branch_id', filter.branchId);
       if (filter?.status) fallbackQuery = fallbackQuery.eq('status', filter.status);
       if (filter?.customerPhone) fallbackQuery = fallbackQuery.eq('customer_phone', filter.customerPhone);
 
@@ -473,20 +492,30 @@ export class OrderService {
     });
 
     if (rpcError) {
-      // Fallback direct table update if RPC rejected due to unapplied migration
-      const { error: directError } = await supabase
-        .from('orders')
-        .update({ status: newStatus, updated_at: new Date().toISOString() })
-        .eq('id', orderId);
+      // Try direct status update RPC
+      const { error: directRpcError } = await supabase.rpc('update_order_status_direct', {
+        p_order_id: orderId,
+        p_new_status: newStatus,
+        p_user_id: userId || null,
+        p_notes: notes || null,
+      });
 
-      if (!directError) {
-        try {
-          await supabase.from('order_status_history').insert({
-            order_id: orderId,
-            to_status: newStatus,
-            notes: notes || `Order marked ${newStatus}`,
-          });
-        } catch {}
+      if (directRpcError) {
+        // Fallback direct table update
+        const { error: directError } = await supabase
+          .from('orders')
+          .update({ status: newStatus, updated_at: new Date().toISOString() })
+          .eq('id', orderId);
+
+        if (!directError) {
+          try {
+            await supabase.from('order_status_history').insert({
+              order_id: orderId,
+              to_status: newStatus,
+              notes: notes || `Order marked ${newStatus}`,
+            });
+          } catch {}
+        }
       }
     }
 
@@ -537,6 +566,16 @@ export class OrderService {
         .from('orders')
         .update({ status: 'ASSIGNED', updated_at: new Date().toISOString() })
         .eq('id', orderId);
+
+      try {
+        await supabase.from('order_status_history').insert({
+          order_id: orderId,
+          from_status: 'READY',
+          to_status: 'ASSIGNED',
+          changed_by_user_id: riderId,
+          notes: `Delivery order claimed by ${riderName || 'Rider'}`,
+        });
+      } catch {}
     }
 
     return true;
