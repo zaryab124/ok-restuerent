@@ -421,15 +421,15 @@ export default function BranchAdminPortal() {
                         <OrderStatusBadge status={o.status} />
                       </td>
                       <td className="p-4 text-right">
-                        <div className="flex items-center justify-end gap-2">
+                        <div className="flex items-center justify-end gap-2 flex-wrap">
                           {o.status === 'PENDING' && (
                             <>
                               <button
                                 type="button"
                                 onClick={() => handleUpdateStatus(o.id, 'CONFIRMED')}
-                                className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black rounded-lg text-xs shadow-md transition-all active:scale-95 cursor-pointer"
+                                className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black rounded-lg text-xs shadow-md transition-all active:scale-95 cursor-pointer flex items-center gap-1"
                               >
-                                Approve
+                                Approve & Send to Kitchen
                               </button>
                               <button
                                 type="button"
@@ -441,36 +441,86 @@ export default function BranchAdminPortal() {
                             </>
                           )}
                           {o.status === 'CONFIRMED' && (
-                            <span className="text-[11px] font-bold text-amber-400 bg-amber-500/10 px-2.5 py-1 rounded-lg border border-amber-500/20">
-                              Waiting for Kitchen
-                            </span>
+                            <>
+                              <span className="text-[11px] font-bold text-amber-400 bg-amber-500/10 px-2.5 py-1 rounded-lg border border-amber-500/20">
+                                In Kitchen Queue
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => handleUpdateStatus(o.id, 'PREPARING')}
+                                className="px-3 py-1.5 bg-blue-500 hover:bg-blue-600 text-white font-bold rounded-lg text-xs shadow-md transition-all active:scale-95 cursor-pointer"
+                              >
+                                Start Cooking 🍳
+                              </button>
+                            </>
                           )}
                           {o.status === 'PREPARING' && (
-                            <span className="text-[11px] font-bold text-blue-400 bg-blue-500/10 px-2.5 py-1 rounded-lg border border-blue-500/20">
-                              Kitchen Cooking 🍳
-                            </span>
+                            <>
+                              <span className="text-[11px] font-bold text-blue-400 bg-blue-500/10 px-2.5 py-1 rounded-lg border border-blue-500/20">
+                                Cooking 🍳
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => handleUpdateStatus(o.id, 'READY')}
+                                className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black rounded-lg text-xs shadow-md transition-all active:scale-95 cursor-pointer"
+                              >
+                                Mark Ready 🍲
+                              </button>
+                            </>
                           )}
                           {o.status === 'READY' && (
                             <>
                               {o.order_type === 'DELIVERY' ? (
-                                <span className="text-[11px] font-bold text-indigo-400 bg-indigo-500/10 px-2.5 py-1 rounded-lg border border-indigo-500/20">
-                                  Ready for Rider 🛵
-                                </span>
+                                <>
+                                  <span className="text-[11px] font-bold text-indigo-400 bg-indigo-500/10 px-2.5 py-1 rounded-lg border border-indigo-500/20">
+                                    Ready for Delivery 🛵
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleUpdateStatus(o.id, 'OUT_FOR_DELIVERY')}
+                                    className="px-3 py-1.5 bg-indigo-500 hover:bg-indigo-600 text-white font-bold rounded-lg text-xs shadow-md transition-all active:scale-95 cursor-pointer"
+                                  >
+                                    Dispatch 🛵
+                                  </button>
+                                </>
                               ) : (
                                 <button
                                   type="button"
                                   onClick={() => handleUpdateStatus(o.id, 'COMPLETED')}
                                   className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black rounded-lg text-xs shadow-md transition-all active:scale-95 cursor-pointer"
                                 >
-                                  Complete & Served
+                                  Complete & Served ✅
                                 </button>
                               )}
                             </>
                           )}
-                          {(o.status === 'ASSIGNED' || o.status === 'PICKED_UP' || o.status === 'OUT_FOR_DELIVERY') && (
-                            <span className="text-[11px] font-bold text-amber-400 bg-amber-500/10 px-2.5 py-1 rounded-lg border border-amber-500/20">
-                              {o.status.replace(/_/g, ' ')} 🛵
-                            </span>
+                          {(o.status === 'ASSIGNED' || o.status === 'PICKED_UP') && (
+                            <>
+                              <span className="text-[11px] font-bold text-amber-400 bg-amber-500/10 px-2.5 py-1 rounded-lg border border-amber-500/20">
+                                Rider Assigned 🛵
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => handleUpdateStatus(o.id, 'OUT_FOR_DELIVERY')}
+                                className="px-3 py-1.5 bg-indigo-500 hover:bg-indigo-600 text-white font-bold rounded-lg text-xs shadow-md transition-all active:scale-95 cursor-pointer"
+                              >
+                                Out for Delivery 🛵
+                              </button>
+                            </>
+                          )}
+                          {o.status === 'OUT_FOR_DELIVERY' && (
+                            <>
+                              <span className="text-[11px] font-bold text-indigo-400 bg-indigo-500/10 px-2.5 py-1 rounded-lg border border-indigo-500/20">
+                                On The Way 🛵
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => handleUpdateStatus(o.id, 'DELIVERED')}
+                                className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black rounded-lg text-xs shadow-md transition-all active:scale-95 cursor-pointer"
+                              >
+                                Mark Delivered ✅
+                              </button>
+                            </>
                           )}
                           {o.status === 'DELIVERED' && (
                             <button
