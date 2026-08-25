@@ -201,7 +201,7 @@ export class OrderService {
         p_status: filter?.status || null,
       });
 
-      if (!rpcErr && rpcData && Array.isArray(rpcData) && rpcData.length > 0) {
+      if (!rpcErr && rpcData && Array.isArray(rpcData)) {
         let results = rpcData.map((row: any) => this.mapRpcOrderRow(row));
         if (filter?.customerPhone) {
           results = results.filter((o) => o.customer_phone === filter.customerPhone);
