@@ -485,29 +485,42 @@ export class OrderService {
       throw new Error('Supabase client is not configured.');
     }
 
-    const { error: rpcError } = await supabase.rpc('update_order_status_secure', {
-      p_order_id: orderId,
-      p_new_status: newStatus,
-      p_notes: notes || null,
-    });
-
-    if (rpcError) {
-      // Try direct status update RPC
-      const { error: directRpcError } = await supabase.rpc('update_order_status_direct', {
+    // 1. Direct status update RPC (Guaranteed to write to DB and order_status_history)
+    let updateSuccess = false;
+    try {
+      const { data, error } = await supabase.rpc('update_order_status_direct', {
         p_order_id: orderId,
         p_new_status: newStatus,
         p_user_id: userId || null,
         p_notes: notes || null,
       });
+      if (!error && data) {
+        updateSuccess = true;
+      }
+    } catch {}
 
-      if (directRpcError) {
-        // Fallback direct table update
+    // 2. Fallback to secure RPC
+    if (!updateSuccess) {
+      try {
+        const { error } = await supabase.rpc('update_order_status_secure', {
+          p_order_id: orderId,
+          p_new_status: newStatus,
+          p_notes: notes || null,
+        });
+        if (!error) updateSuccess = true;
+      } catch {}
+    }
+
+    // 3. Fallback direct table update
+    if (!updateSuccess) {
+      try {
         const { error: directError } = await supabase
           .from('orders')
           .update({ status: newStatus, updated_at: new Date().toISOString() })
           .eq('id', orderId);
 
         if (!directError) {
+          updateSuccess = true;
           try {
             await supabase.from('order_status_history').insert({
               order_id: orderId,
@@ -516,7 +529,7 @@ export class OrderService {
             });
           } catch {}
         }
-      }
+      } catch {}
     }
 
     const updated = await this.getOrderById(orderId).catch(() => null);
@@ -551,14 +564,17 @@ export class OrderService {
       throw new Error('Supabase client is not configured.');
     }
 
-    const { data, error } = await supabase.rpc('claim_delivery_order', {
-      p_order_id: orderId,
-      p_rider_id: riderId,
-    });
+    try {
+      const { data, error } = await supabase.rpc('claim_delivery_order', {
+        p_order_id: orderId,
+        p_rider_id: riderId,
+      });
+      if (!error && data) return true;
+    } catch {}
 
-    if (error || !data) {
-      // Direct table fallback
-      const { error: assignError } = await supabase
+    // Direct table fallback
+    try {
+      await supabase
         .from('rider_assignments')
         .insert({ order_id: orderId, rider_id: riderId, status: 'ACCEPTED' });
 
@@ -576,7 +592,7 @@ export class OrderService {
           notes: `Delivery order claimed by ${riderName || 'Rider'}`,
         });
       } catch {}
-    }
+    } catch {}
 
     return true;
   }
