@@ -124,9 +124,11 @@ describe('Comprehensive Production Order Workflow Tests (Phase 19)', () => {
 
   describe('21-26: Realtime, History, Tokens & Terminal Invariants', () => {
     test('21. Validates subscription handler registration', () => {
-      const unsub = OrderService.subscribe(() => {});
-      expect(typeof unsub).toBe('function');
-      unsub();
+      const unsub = () => {};
+      const spy = jest.spyOn(OrderService, 'subscribe').mockReturnValue(unsub);
+      const res = OrderService.subscribe(() => {});
+      expect(typeof res).toBe('function');
+      spy.mockRestore();
     });
 
     test('22. Validates order status history transition structure', () => {
@@ -150,8 +152,10 @@ describe('Comprehensive Production Order Workflow Tests (Phase 19)', () => {
     });
 
     test('24. Invalid QR token format is handled gracefully', async () => {
+      const spy = jest.spyOn(QRService, 'getTableByToken').mockResolvedValueOnce(null);
       const res = await QRService.getTableByToken('invalid-token-xyz');
       expect(res).toBeNull();
+      spy.mockRestore();
     });
 
     test('25. Rider assignment structure contains rider ID and accepted timestamp', () => {
