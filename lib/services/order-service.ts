@@ -295,13 +295,21 @@ export class OrderService {
 
     const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
 
-    // 1. Try public tracking token RPC first if it's a UUID (works unconditionally for customer tracking)
+    // 1. Try public RPC resolver (handles tracking tokens, order ids, order numbers)
+    try {
+      const { data: identData } = await supabase.rpc('get_order_by_identifier', { p_identifier: id });
+      if (identData && identData.length > 0) {
+        return this.mapRpcOrderRow(identData[0]);
+      }
+    } catch {}
+
+    // 2. Try tracking token RPC if it's a UUID
     if (isUuid) {
       const rpcOrder = await this.getOrderByTrackingToken(id).catch(() => null);
       if (rpcOrder) return rpcOrder;
     }
 
-    // 2. Direct query for authenticated staff / admin users
+    // 3. Direct table query for authenticated staff / admin users
     let query = supabase
       .from('orders')
       .select('*, items:order_items(*), history:order_status_history(*), rider_assignment:rider_assignments(*)');
@@ -369,22 +377,7 @@ export class OrderService {
     };
   }
 
-  static async getOrderByTrackingToken(trackingToken: string): Promise<Order | null> {
-    if (!supabase) {
-      throw new Error('Supabase client is not configured.');
-    }
-
-    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(trackingToken);
-    if (!isUuid) return null;
-
-    const { data, error } = await supabase.rpc('get_order_by_tracking_token', {
-      p_tracking_token: trackingToken,
-    });
-
-    if (error || !data || data.length === 0) return null;
-
-    const row = data[0];
-
+  private static mapRpcOrderRow(row: any): Order {
     return {
       id: row.order_id,
       order_number: row.order_number,
@@ -432,6 +425,35 @@ export class OrderService {
           }
         : undefined,
     };
+  }
+
+  static async getOrderByTrackingToken(trackingToken: string): Promise<Order | null> {
+    if (!supabase) {
+      throw new Error('Supabase client is not configured.');
+    }
+
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(trackingToken);
+    
+    // 1. Try get_order_by_identifier
+    try {
+      const { data: identData } = await supabase.rpc('get_order_by_identifier', { p_identifier: trackingToken });
+      if (identData && identData.length > 0) {
+        return this.mapRpcOrderRow(identData[0]);
+      }
+    } catch {}
+
+    // 2. Try get_order_by_tracking_token if UUID
+    if (isUuid) {
+      const { data, error } = await supabase.rpc('get_order_by_tracking_token', {
+        p_tracking_token: trackingToken,
+      });
+
+      if (!error && data && data.length > 0) {
+        return this.mapRpcOrderRow(data[0]);
+      }
+    }
+
+    return null;
   }
 
   static async updateOrderStatus(

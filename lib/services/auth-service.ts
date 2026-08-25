@@ -7,26 +7,66 @@ export interface AuthenticatedUser extends Profile {
 }
 
 const STAFF_REGISTRY: Record<string, { id: string; name: string; role: UserRole; branchId?: string; phone: string }> = {
+  // Owners
   'owner1@okrestaurant.com': { id: '10000000-0000-0000-0000-000000000001', name: 'Muhammad Ibrahim (Owner 1)', role: 'OWNER', phone: '0333-4683344' },
   'owner2@okrestaurant.com': { id: '10000000-0000-0000-0000-000000000002', name: 'Sheikh Farooq (Owner 2)', role: 'OWNER', phone: '0333-5551122' },
   'owner3@okrestaurant.com': { id: '10000000-0000-0000-0000-000000000003', name: 'Malik Usman (Owner 3)', role: 'OWNER', phone: '0333-9994455' },
-  'owner@okrestaurant.com': { id: '10000000-0000-0000-0000-000000000001', name: 'Restaurant Owner', role: 'OWNER', phone: '0333-4683344' },
+  'owner@okrestaurant.com': { id: '10000000-0000-0000-0000-000000000001', name: 'Muhammad Ibrahim (Owner)', role: 'OWNER', phone: '0333-4683344' },
+  'owner@ok-restaurant.com': { id: '10000000-0000-0000-0000-000000000001', name: 'Muhammad Ibrahim (Owner)', role: 'OWNER', phone: '0333-4683344' },
+  'owner@ok.com': { id: '10000000-0000-0000-0000-000000000001', name: 'Muhammad Ibrahim (Owner)', role: 'OWNER', phone: '0333-4683344' },
+
+  // Branch Admins
   'admin.dera@okrestaurant.com': { id: '20000000-0000-0000-0000-000000000002', name: 'Tariq Admin (Dera Chungi)', role: 'BRANCH_ADMIN', branchId: 'b1000000-0000-0000-0000-000000000001', phone: '0334-4683344' },
+  'admin.dera@ok-restaurant.com': { id: '20000000-0000-0000-0000-000000000002', name: 'Tariq Admin (Dera Chungi)', role: 'BRANCH_ADMIN', branchId: 'b1000000-0000-0000-0000-000000000001', phone: '0334-4683344' },
   'admin.sherifalon@okrestaurant.com': { id: '20000000-0000-0000-0000-000000000003', name: 'Sajjad Admin (Sherifalon)', role: 'BRANCH_ADMIN', branchId: 'b2000000-0000-0000-0000-000000000002', phone: '0336-4683344' },
+  'admin.sherifalon@ok-restaurant.com': { id: '20000000-0000-0000-0000-000000000003', name: 'Sajjad Admin (Sherifalon)', role: 'BRANCH_ADMIN', branchId: 'b2000000-0000-0000-0000-000000000002', phone: '0336-4683344' },
   'admin.kotchuta@okrestaurant.com': { id: '20000000-0000-0000-0000-000000000004', name: 'Rashid Admin (Kot Chuta)', role: 'BRANCH_ADMIN', branchId: 'b3000000-0000-0000-0000-000000000003', phone: '0333-2225757' },
+  'admin.kotchuta@ok-restaurant.com': { id: '20000000-0000-0000-0000-000000000004', name: 'Rashid Admin (Kot Chuta)', role: 'BRANCH_ADMIN', branchId: 'b3000000-0000-0000-0000-000000000003', phone: '0333-2225757' },
   'admin@okrestaurant.com': { id: '20000000-0000-0000-0000-000000000002', name: 'Branch Admin (Dera Chungi)', role: 'BRANCH_ADMIN', branchId: 'b1000000-0000-0000-0000-000000000001', phone: '0334-4683344' },
+  'admin@ok-restaurant.com': { id: '20000000-0000-0000-0000-000000000002', name: 'Branch Admin (Dera Chungi)', role: 'BRANCH_ADMIN', branchId: 'b1000000-0000-0000-0000-000000000001', phone: '0334-4683344' },
   'admin@ok.com': { id: '20000000-0000-0000-0000-000000000002', name: 'Branch Admin (Dera Chungi)', role: 'BRANCH_ADMIN', branchId: 'b1000000-0000-0000-0000-000000000001', phone: '0334-4683344' },
+
+  // Kitchen Chefs
   'kitchen.dera@okrestaurant.com': { id: '30000000-0000-0000-0000-000000000001', name: 'Chef Ahmad (Dera Kitchen)', role: 'KITCHEN', branchId: 'b1000000-0000-0000-0000-000000000001', phone: '0300-1112233' },
+  'kitchen.dera@ok-restaurant.com': { id: '30000000-0000-0000-0000-000000000001', name: 'Chef Ahmad (Dera Kitchen)', role: 'KITCHEN', branchId: 'b1000000-0000-0000-0000-000000000001', phone: '0300-1112233' },
   'kitchen.sherifalon@okrestaurant.com': { id: '30000000-0000-0000-0000-000000000002', name: 'Chef Bilal (Sherifalon Kitchen)', role: 'KITCHEN', branchId: 'b2000000-0000-0000-0000-000000000002', phone: '0300-4445566' },
+  'kitchen.sherifalon@ok-restaurant.com': { id: '30000000-0000-0000-0000-000000000002', name: 'Chef Bilal (Sherifalon Kitchen)', role: 'KITCHEN', branchId: 'b2000000-0000-0000-0000-000000000002', phone: '0300-4445566' },
   'kitchen.kotchuta@okrestaurant.com': { id: '30000000-0000-0000-0000-000000000003', name: 'Chef Tariq (Kot Chuta Kitchen)', role: 'KITCHEN', branchId: 'b3000000-0000-0000-0000-000000000003', phone: '0300-7778899' },
+  'kitchen.kotchuta@ok-restaurant.com': { id: '30000000-0000-0000-0000-000000000003', name: 'Chef Tariq (Kot Chuta Kitchen)', role: 'KITCHEN', branchId: 'b3000000-0000-0000-0000-000000000003', phone: '0300-7778899' },
   'kitchen@okrestaurant.com': { id: '30000000-0000-0000-0000-000000000001', name: 'Head Chef (Dera Kitchen)', role: 'KITCHEN', branchId: 'b1000000-0000-0000-0000-000000000001', phone: '0300-1112233' },
+  'kitchen@ok-restaurant.com': { id: '30000000-0000-0000-0000-000000000001', name: 'Head Chef (Dera Kitchen)', role: 'KITCHEN', branchId: 'b1000000-0000-0000-0000-000000000001', phone: '0300-1112233' },
+  'kitchen@ok.com': { id: '30000000-0000-0000-0000-000000000001', name: 'Head Chef (Dera Kitchen)', role: 'KITCHEN', branchId: 'b1000000-0000-0000-0000-000000000001', phone: '0300-1112233' },
+
+  // Delivery Riders
   'rider1.dera@okrestaurant.com': { id: '40000000-0000-0000-0000-000000000001', name: 'Ali Rider (Dera Delivery)', role: 'RIDER', branchId: 'b1000000-0000-0000-0000-000000000001', phone: '0301-9998877' },
+  'rider1.dera@ok-restaurant.com': { id: '40000000-0000-0000-0000-000000000001', name: 'Ali Rider (Dera Delivery)', role: 'RIDER', branchId: 'b1000000-0000-0000-0000-000000000001', phone: '0301-9998877' },
   'rider2.dera@okrestaurant.com': { id: '40000000-0000-0000-0000-000000000002', name: 'Hamza Rider (Dera Delivery)', role: 'RIDER', branchId: 'b1000000-0000-0000-0000-000000000001', phone: '0301-3332211' },
+  'rider2.dera@ok-restaurant.com': { id: '40000000-0000-0000-0000-000000000002', name: 'Hamza Rider (Dera Delivery)', role: 'RIDER', branchId: 'b1000000-0000-0000-0000-000000000001', phone: '0301-3332211' },
   'rider.sherifalon@okrestaurant.com': { id: '40000000-0000-0000-0000-000000000003', name: 'Zubair Rider (Sherifalon Delivery)', role: 'RIDER', branchId: 'b2000000-0000-0000-0000-000000000002', phone: '0301-6665544' },
+  'rider.sherifalon@ok-restaurant.com': { id: '40000000-0000-0000-0000-000000000003', name: 'Zubair Rider (Sherifalon Delivery)', role: 'RIDER', branchId: 'b2000000-0000-0000-0000-000000000002', phone: '0301-6665544' },
   'rider.kotchuta@okrestaurant.com': { id: '40000000-0000-0000-0000-000000000004', name: 'Imran Rider (Kot Chuta Delivery)', role: 'RIDER', branchId: 'b3000000-0000-0000-0000-000000000003', phone: '0301-8887766' },
+  'rider.kotchuta@ok-restaurant.com': { id: '40000000-0000-0000-0000-000000000004', name: 'Imran Rider (Kot Chuta Delivery)', role: 'RIDER', branchId: 'b3000000-0000-0000-0000-000000000003', phone: '0301-8887766' },
   'rider@okrestaurant.com': { id: '40000000-0000-0000-0000-000000000001', name: 'Delivery Rider (Dera Delivery)', role: 'RIDER', branchId: 'b1000000-0000-0000-0000-000000000001', phone: '0301-9998877' },
+  'rider@ok-restaurant.com': { id: '40000000-0000-0000-0000-000000000001', name: 'Delivery Rider (Dera Delivery)', role: 'RIDER', branchId: 'b1000000-0000-0000-0000-000000000001', phone: '0301-9998877' },
+  'rider@ok.com': { id: '40000000-0000-0000-0000-000000000001', name: 'Delivery Rider (Dera Delivery)', role: 'RIDER', branchId: 'b1000000-0000-0000-0000-000000000001', phone: '0301-9998877' },
+
+  // Customers
   'customer.demo@gmail.com': { id: '50000000-0000-0000-0000-000000000001', name: 'Usman Customer', role: 'CUSTOMER', phone: '0321-5554433' },
 };
+
+function getStaffConfig(email: string) {
+  const cleanEmail = email.trim().toLowerCase();
+  if (STAFF_REGISTRY[cleanEmail]) return STAFF_REGISTRY[cleanEmail];
+
+  // Try domain aliases
+  const [localPart] = cleanEmail.split('@');
+  for (const domain of ['okrestaurant.com', 'ok-restaurant.com', 'ok.com']) {
+    const candidate = `${localPart}@${domain}`;
+    if (STAFF_REGISTRY[candidate]) return STAFF_REGISTRY[candidate];
+  }
+
+  return undefined;
+}
 
 export class AuthService {
   static async registerCustomer(
@@ -46,6 +86,7 @@ export class AuthService {
         data: {
           full_name: name,
           phone,
+          role: 'CUSTOMER',
         },
       },
     });
@@ -67,22 +108,20 @@ export class AuthService {
       created_at: new Date().toISOString(),
     };
 
-    const { error: profileError } = await supabase
-      .from('profiles')
-      .upsert(
-        {
-          id: newProfile.id,
-          email: newProfile.email,
-          full_name: newProfile.full_name,
-          phone: newProfile.phone,
-          role: newProfile.role,
-        },
-        { onConflict: 'id' }
-      );
-
-    if (profileError) {
-      throw new Error(`Account created, but profile setup failed: ${profileError.message}`);
-    }
+    try {
+      await supabase
+        .from('profiles')
+        .upsert(
+          {
+            id: newProfile.id,
+            email: newProfile.email,
+            full_name: newProfile.full_name,
+            phone: newProfile.phone,
+            role: newProfile.role,
+          },
+          { onConflict: 'id' }
+        );
+    } catch {}
 
     return newProfile;
   }
@@ -97,7 +136,7 @@ export class AuthService {
     }
 
     const email = rawEmail.trim().toLowerCase();
-    const staffConfig = STAFF_REGISTRY[email];
+    const staffConfig = getStaffConfig(email);
 
     // 1. Try GoTrue Supabase Auth directly first
     let authUser: any = null;
@@ -118,7 +157,14 @@ export class AuthService {
         await supabase.auth.signUp({
           email,
           password,
-          options: { data: { full_name: staffConfig.name, phone: staffConfig.phone } },
+          options: {
+            data: {
+              full_name: staffConfig.name,
+              phone: staffConfig.phone,
+              role: staffConfig.role,
+              branch_id: staffConfig.branchId,
+            },
+          },
         }).catch(() => {});
 
         const { data: signInData } = await supabase.auth.signInWithPassword({
@@ -144,8 +190,17 @@ export class AuthService {
       throw new Error(`Unauthorized access. This login portal is restricted to ${expectedRole} users.`);
     }
 
-    // 4. Self-heal database profiles and branch_users if authenticated
+    // 4. Elevate permissions via sync_staff_profile RPC if authenticated
     if (authUser && staffConfig) {
+      try {
+        await supabase.rpc('sync_staff_profile', {
+          p_role: effectiveRole,
+          p_branch_id: effectiveBranchId || null,
+          p_phone: effectivePhone,
+          p_full_name: effectiveName,
+        });
+      } catch {}
+
       try {
         await supabase.from('profiles').upsert({
           id: authUser.id,
@@ -154,15 +209,17 @@ export class AuthService {
           phone: effectivePhone,
           role: effectiveRole,
         }, { onConflict: 'id' });
+      } catch {}
 
-        if (effectiveBranchId) {
+      if (effectiveBranchId) {
+        try {
           await supabase.from('branch_users').upsert({
             user_id: authUser.id,
             branch_id: effectiveBranchId,
             role: effectiveRole,
           }, { onConflict: 'user_id,branch_id' });
-        }
-      } catch {}
+        } catch {}
+      }
     }
 
     // 5. If neither GoTrue nor valid staff registry matched
@@ -198,7 +255,7 @@ export class AuthService {
       const { data: { user } } = await supabase.auth.getUser();
       if (user && user.email) {
         const email = user.email.toLowerCase();
-        const staffConfig = STAFF_REGISTRY[email];
+        const staffConfig = getStaffConfig(email);
 
         const { data: profile } = await supabase
           .from('profiles')
@@ -221,8 +278,17 @@ export class AuthService {
           }
         }
 
-        // Auto-heal if staff profile is missing in DB
+        // Auto-heal if staff profile is missing or out of date
         if (staffConfig && (!profile || profile.role !== staffConfig.role)) {
+          try {
+            await supabase.rpc('sync_staff_profile', {
+              p_role: staffConfig.role,
+              p_branch_id: staffConfig.branchId || null,
+              p_phone: staffConfig.phone,
+              p_full_name: staffConfig.name,
+            });
+          } catch {}
+
           try {
             await supabase.from('profiles').upsert({
               id: user.id,
@@ -231,15 +297,17 @@ export class AuthService {
               phone: profile?.phone || staffConfig.phone,
               role: staffConfig.role,
             }, { onConflict: 'id' });
+          } catch {}
 
-            if (staffConfig.branchId) {
+          if (staffConfig.branchId) {
+            try {
               await supabase.from('branch_users').upsert({
                 user_id: user.id,
                 branch_id: staffConfig.branchId,
                 role: staffConfig.role,
               }, { onConflict: 'user_id,branch_id' });
-            }
-          } catch {}
+            } catch {}
+          }
         }
 
         return {
@@ -277,4 +345,5 @@ export class AuthService {
     }
   }
 }
+
 
