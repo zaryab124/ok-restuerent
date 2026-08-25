@@ -16,9 +16,34 @@ export class OrderService {
         { event: '*', schema: 'public', table: 'orders' },
         async (payload) => {
           if (payload.new && (payload.new as any).id) {
-            const fullOrder = await this.getOrderById((payload.new as any).id).catch(() => null);
+            const rawRow = payload.new as any;
+            const fullOrder = await this.getOrderById(rawRow.id).catch(() => null);
             if (fullOrder) {
               callback(fullOrder);
+            } else {
+              callback({
+                id: rawRow.id,
+                order_number: rawRow.order_number || '',
+                tracking_token: rawRow.tracking_token || rawRow.id,
+                branch_id: rawRow.branch_id,
+                customer_id: rawRow.customer_id || undefined,
+                customer_name: rawRow.customer_name || 'Customer',
+                customer_phone: rawRow.customer_phone || '',
+                order_type: rawRow.order_type || 'DELIVERY',
+                table_id: rawRow.table_id || undefined,
+                delivery_address: rawRow.delivery_address || undefined,
+                delivery_notes: rawRow.delivery_notes || undefined,
+                subtotal: Number(rawRow.subtotal || 0),
+                delivery_fee: Number(rawRow.delivery_fee || 0),
+                total_amount: Number(rawRow.total_amount || 0),
+                payment_method: rawRow.payment_method || 'CASH',
+                payment_status: rawRow.payment_status || 'PENDING',
+                status: rawRow.status || 'PENDING',
+                created_at: rawRow.created_at || new Date().toISOString(),
+                updated_at: rawRow.updated_at || new Date().toISOString(),
+                items: [],
+                history: [],
+              });
             }
           }
         }

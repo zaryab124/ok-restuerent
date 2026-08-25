@@ -85,9 +85,26 @@ export default function BranchAdminPortal() {
     loadBranchData(selectedBranchId);
 
     const unsubscribe = OrderService.subscribe((updatedOrder) => {
-      setOrders((prev) =>
-        prev.map((o) => (o.id === updatedOrder.id ? { ...o, status: updatedOrder.status } : o))
-      );
+      setOrders((prev) => {
+        const exists = prev.some((o) => o.id === updatedOrder.id);
+        if (exists) {
+          return prev.map((o) =>
+            o.id === updatedOrder.id
+              ? {
+                  ...o,
+                  ...updatedOrder,
+                  items: updatedOrder.items && updatedOrder.items.length > 0 ? updatedOrder.items : o.items,
+                  history: updatedOrder.history && updatedOrder.history.length > 0 ? updatedOrder.history : o.history,
+                }
+              : o
+          );
+        } else {
+          if (selectedBranchId === 'all' || updatedOrder.branch_id === selectedBranchId) {
+            return [updatedOrder, ...prev];
+          }
+          return prev;
+        }
+      });
     });
 
     return () => unsubscribe();

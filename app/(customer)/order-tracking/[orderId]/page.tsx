@@ -29,7 +29,15 @@ export default function OrderTrackingPage({ params }: { params: { orderId: strin
         updatedOrder.order_number === params.orderId ||
         updatedOrder.tracking_token === params.orderId
       ) {
-        setOrder({ ...updatedOrder });
+        setOrder((prev) => {
+          if (!prev) return updatedOrder;
+          return {
+            ...prev,
+            ...updatedOrder,
+            items: updatedOrder.items && updatedOrder.items.length > 0 ? updatedOrder.items : prev.items,
+            history: updatedOrder.history && updatedOrder.history.length > 0 ? updatedOrder.history : prev.history,
+          };
+        });
       }
     });
 
