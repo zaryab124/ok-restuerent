@@ -559,6 +559,35 @@ export class OrderService {
     };
   }
 
+  static async batchUpdateOrderStatus(
+    orderIds: string[],
+    newStatus: OrderStatus,
+    userId?: string,
+    notes?: string
+  ): Promise<number> {
+    if (!supabase) {
+      throw new Error('Supabase client is not configured.');
+    }
+
+    try {
+      const { data, error } = await supabase.rpc('batch_update_order_status', {
+        p_order_ids: orderIds,
+        p_new_status: newStatus,
+        p_user_id: userId || null,
+        p_notes: notes || `Batch update to ${newStatus}`,
+      });
+      if (!error && typeof data === 'number') {
+        return data;
+      }
+    } catch {}
+
+    // Parallel fallback
+    await Promise.all(
+      orderIds.map((id) => this.updateOrderStatus(id, newStatus, userId, notes))
+    );
+    return orderIds.length;
+  }
+
   static async claimOrderForRider(orderId: string, riderId: string, riderName?: string): Promise<boolean> {
     if (!supabase) {
       throw new Error('Supabase client is not configured.');

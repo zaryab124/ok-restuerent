@@ -54,6 +54,10 @@ export default function BranchAdminPortal() {
   const [verifyTokenInput, setVerifyTokenInput] = useState('');
   const [scanMessage, setScanMessage] = useState<string | null>(null);
 
+  // Multi-order Batch Actions & Menu Messages
+  const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([]);
+  const [menuSaveMessage, setMenuSaveMessage] = useState<string | null>(null);
+
   useEffect(() => {
     async function initAdmin() {
       const user = await AuthService.fetchCurrentUser();
@@ -144,6 +148,40 @@ export default function BranchAdminPortal() {
     }
   };
 
+  const handleToggleSelectAll = () => {
+    if (selectedOrderIds.length === orders.length) {
+      setSelectedOrderIds([]);
+    } else {
+      setSelectedOrderIds(orders.map((o) => o.id));
+    }
+  };
+
+  const handleToggleOrderSelect = (orderId: string) => {
+    setSelectedOrderIds((prev) =>
+      prev.includes(orderId) ? prev.filter((id) => id !== orderId) : [...prev, orderId]
+    );
+  };
+
+  const handleBatchStatusUpdate = async (nextStatus: OrderStatus) => {
+    if (selectedOrderIds.length === 0) return;
+
+    const targetIds = [...selectedOrderIds];
+    // Optimistic UI update
+    setOrders((prev) =>
+      prev.map((o) => (targetIds.includes(o.id) ? { ...o, status: nextStatus } : o))
+    );
+    setSelectedOrderIds([]);
+
+    try {
+      const userId = adminUser?.id || '20000000-0000-0000-0000-000000000002';
+      await OrderService.batchUpdateOrderStatus(targetIds, nextStatus, userId, `Admin batch update to ${nextStatus}`);
+      await loadBranchData(selectedBranchId);
+    } catch (err: any) {
+      console.error('Batch status update error:', err);
+      await loadBranchData(selectedBranchId);
+    }
+  };
+
   const handleLogout = async () => {
     await AuthService.logout();
     router.push('/admin/login');
@@ -181,33 +219,40 @@ export default function BranchAdminPortal() {
   const handleSaveMenuItem = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!itemName || !itemPrice || !itemCategoryId) return;
+    setMenuSaveMessage(null);
 
-    if (editingItem) {
-      await MenuService.updateMenuItem(editingItem.id, {
-        name: itemName,
-        description: itemDesc,
-        base_price: itemPrice,
-        category_id: itemCategoryId,
-        image_url: itemImageUrl,
-      });
-    } else {
-      await MenuService.addMenuItem({
-        category_id: itemCategoryId,
-        name: itemName,
-        description: itemDesc,
-        base_price: itemPrice,
-        has_variants: false,
-        image_url: itemImageUrl,
-        is_available: true,
-        sort_order: menuItems.length + 1,
-      });
+    try {
+      if (editingItem) {
+        await MenuService.updateMenuItem(editingItem.id, {
+          name: itemName,
+          description: itemDesc,
+          base_price: itemPrice,
+          category_id: itemCategoryId,
+          image_url: itemImageUrl,
+        });
+        setMenuSaveMessage(`Menu item "${itemName}" updated successfully!`);
+      } else {
+        await MenuService.addMenuItem({
+          category_id: itemCategoryId,
+          name: itemName,
+          description: itemDesc,
+          base_price: itemPrice,
+          has_variants: false,
+          image_url: itemImageUrl,
+          is_available: true,
+          sort_order: menuItems.length + 1,
+        });
+        setMenuSaveMessage(`New menu item "${itemName}" added successfully!`);
+      }
+
+      setEditingItem(null);
+      setItemName('');
+      setItemDesc('');
+      setItemPrice(0);
+      await loadBranchData(selectedBranchId);
+    } catch (err: any) {
+      setMenuSaveMessage(`Failed to save menu item: ${err.message}`);
     }
-
-    setEditingItem(null);
-    setItemName('');
-    setItemDesc('');
-    setItemPrice(0);
-    loadBranchData(selectedBranchId);
   };
 
   const handleCreateBuffet = async (e: React.FormEvent) => {
@@ -376,7 +421,12 @@ export default function BranchAdminPortal() {
         {activeTab === 'orders' && (
           <div className="bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden shadow-2xl">
             <div className="p-4 border-b border-slate-800 flex items-center justify-between">
-              <h3 className="font-bold text-sm text-white">Branch Incoming Orders</h3>
+              <div className="flex items-center gap-3">
+                <h3 className="font-bold text-sm text-white">Branch Incoming Orders</h3>
+                <span className="px-2 py-0.5 rounded-full bg-slate-800 text-[11px] font-mono text-amber-400 font-bold">
+                  {orders.length} Total
+                </span>
+              </div>
               <button
                 onClick={() => loadBranchData(selectedBranchId)}
                 className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-300 flex items-center gap-1.5"
@@ -385,10 +435,69 @@ export default function BranchAdminPortal() {
               </button>
             </div>
 
+            {/* Multi-order Batch Operations Toolbar */}
+            {selectedOrderIds.length > 0 && (
+              <div className="bg-amber-500/10 border-b border-amber-500/20 px-6 py-3 flex items-center justify-between flex-wrap gap-3 animate-in fade-in duration-200">
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+                  <span className="text-xs font-black text-amber-400">
+                    {selectedOrderIds.length} Order(s) Selected for Bulk Action:
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button
+                    onClick={() => handleBatchStatusUpdate('CONFIRMED')}
+                    className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black rounded-xl text-xs shadow-md transition-all active:scale-95 cursor-pointer"
+                  >
+                    Approve Selected ({selectedOrderIds.length})
+                  </button>
+                  <button
+                    onClick={() => handleBatchStatusUpdate('PREPARING')}
+                    className="px-3 py-1.5 bg-blue-500 hover:bg-blue-600 text-white font-bold rounded-xl text-xs shadow-md transition-all active:scale-95 cursor-pointer"
+                  >
+                    Send to Kitchen ({selectedOrderIds.length})
+                  </button>
+                  <button
+                    onClick={() => handleBatchStatusUpdate('READY')}
+                    className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black rounded-xl text-xs shadow-md transition-all active:scale-95 cursor-pointer"
+                  >
+                    Mark Ready ({selectedOrderIds.length})
+                  </button>
+                  <button
+                    onClick={() => handleBatchStatusUpdate('OUT_FOR_DELIVERY')}
+                    className="px-3 py-1.5 bg-indigo-500 hover:bg-indigo-600 text-white font-bold rounded-xl text-xs shadow-md transition-all active:scale-95 cursor-pointer"
+                  >
+                    Dispatch ({selectedOrderIds.length})
+                  </button>
+                  <button
+                    onClick={() => handleBatchStatusUpdate('REJECTED')}
+                    className="px-3 py-1.5 bg-rose-500/20 hover:bg-rose-500/40 text-rose-400 font-bold rounded-xl text-xs transition-all active:scale-95 cursor-pointer"
+                  >
+                    Reject Selected
+                  </button>
+                  <button
+                    onClick={() => setSelectedOrderIds([])}
+                    className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white rounded-xl text-xs font-bold"
+                  >
+                    Deselect All
+                  </button>
+                </div>
+              </div>
+            )}
+
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs text-slate-300">
                 <thead className="bg-slate-950 text-slate-400 uppercase text-[10px] font-bold">
                   <tr>
+                    <th className="p-4 w-10">
+                      <input
+                        type="checkbox"
+                        checked={orders.length > 0 && selectedOrderIds.length === orders.length}
+                        onChange={handleToggleSelectAll}
+                        className="rounded border-slate-700 bg-slate-900 text-amber-500 focus:ring-0 cursor-pointer w-4 h-4"
+                        title="Select All Orders"
+                      />
+                    </th>
                     <th className="p-4">Order #</th>
                     <th className="p-4">Type</th>
                     <th className="p-4">Customer</th>
@@ -400,7 +509,15 @@ export default function BranchAdminPortal() {
                 </thead>
                 <tbody className="divide-y divide-slate-800">
                   {orders.map((o) => (
-                    <tr key={o.id} className="hover:bg-slate-800/40">
+                    <tr key={o.id} className={`hover:bg-slate-800/40 ${selectedOrderIds.includes(o.id) ? 'bg-amber-500/5' : ''}`}>
+                      <td className="p-4">
+                        <input
+                          type="checkbox"
+                          checked={selectedOrderIds.includes(o.id)}
+                          onChange={() => handleToggleOrderSelect(o.id)}
+                          className="rounded border-slate-700 bg-slate-900 text-amber-500 focus:ring-0 cursor-pointer w-4 h-4"
+                        />
+                      </td>
                       <td className="p-4 font-black text-amber-400">{o.order_number}</td>
                       <td className="p-4 font-bold text-white">
                         {o.order_type} {o.table_id ? `(${o.table_id})` : ''}
@@ -615,6 +732,16 @@ export default function BranchAdminPortal() {
               <h3 className="text-base font-black text-white border-b border-slate-800 pb-3">
                 {editingItem ? `Edit Product: ${editingItem.name}` : 'Add New Menu Item'}
               </h3>
+
+              {menuSaveMessage && (
+                <div className={`p-3 rounded-xl text-xs font-bold ${
+                  menuSaveMessage.includes('Failed')
+                    ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
+                    : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                }`}>
+                  {menuSaveMessage}
+                </div>
+              )}
 
               <form onSubmit={handleSaveMenuItem} className="space-y-4 text-xs">
                 <div className="space-y-1">
