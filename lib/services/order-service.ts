@@ -139,11 +139,14 @@ export class OrderService {
 
     const createdRecord = Array.isArray(data) ? data[0] : data;
 
-    if (!createdRecord || !createdRecord.out_order_id) {
+    const orderId = createdRecord?.out_order_id || createdRecord?.order_id || createdRecord?.id;
+    if (!orderId) {
       throw new Error('Order creation failed to return order details.');
     }
 
-    const orderId = createdRecord.out_order_id;
+    const orderNumber = createdRecord.out_order_number || createdRecord.order_number || `OK-${Date.now()}`;
+    const trackingToken = createdRecord.out_tracking_token || createdRecord.tracking_token || orderId;
+    const totalAmount = Number(createdRecord.out_total_amount || createdRecord.total_amount || 0);
 
     // Try to fetch the full order (works for authenticated staff / owner)
     const fullOrder = await this.getOrderById(orderId).catch(() => null);
@@ -153,11 +156,10 @@ export class OrderService {
     }
 
     // Build order from RPC response + original params (for anonymous / customer users blocked by RLS)
-    const totalAmount = Number(createdRecord.out_total_amount || 0);
     return {
       id: orderId,
-      order_number: createdRecord.out_order_number || `OK-${Date.now()}`,
-      tracking_token: createdRecord.out_tracking_token || orderId,
+      order_number: orderNumber,
+      tracking_token: trackingToken,
       branch_id: branchId,
       customer_name: customerName,
       customer_phone: customerPhone,
