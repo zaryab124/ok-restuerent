@@ -33,7 +33,7 @@ export const INITIAL_BRANCHES: (Branch & { capabilities: BranchCapability })[] =
   },
   {
     id: 'b3000000-0000-0000-0000-000000000003',
-    name: 'Kot Chuta / Appo Chuta',
+    name: 'Kot Chuta',
     slug: 'kot-chuta',
     address: 'Main Highway, Kot Chuta',
     phone: '0333-2225757',

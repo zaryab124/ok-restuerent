@@ -345,7 +345,7 @@ export default function CustomerHomePage() {
         <div className="max-w-7xl mx-auto px-4 space-y-2">
           <p>© {new Date().getFullYear()} OK RESTAURANT JAMPUR. All Rights Reserved.</p>
           <p className="text-[11px] text-slate-600">
-            Dera Chungi • Main Bypass Jampur • Kot Chuta / Appo Chuta
+            Dera Chungi • Main Bypass Jampur • Kot Chuta
           </p>
         </div>
       </footer>

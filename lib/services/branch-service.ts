@@ -6,6 +6,9 @@ function formatBranchDisplayName(name: string): string {
   if (name.includes('Sherifalon')) {
     return 'Main Bypass Jampur';
   }
+  if (name.toLowerCase().includes('appo')) {
+    return 'Kot Chuta';
+  }
   return name;
 }
 
