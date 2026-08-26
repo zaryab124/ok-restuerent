@@ -2,8 +2,9 @@
 
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Utensils, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
+import { CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
 import { QRService } from '@/lib/services/qr-service';
+import { Logo } from '@/components/Logo';
 
 export default function QRTableLandingPage({ params }: { params: { token: string } }) {
   const router = useRouter();
@@ -49,11 +50,7 @@ export default function QRTableLandingPage({ params }: { params: { token: string
     <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-4">
       <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-md w-full p-8 text-center shadow-2xl space-y-6">
         
-        <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-amber-600 to-amber-400 p-0.5 mx-auto shadow-lg shadow-amber-500/20">
-          <div className="w-full h-full bg-slate-950 rounded-[14px] flex items-center justify-center">
-            <Utensils className="w-8 h-8 text-amber-400" />
-          </div>
-        </div>
+        <Logo size="lg" variant="badge" className="mx-auto" />
 
         {loading && (
           <div className="space-y-3">

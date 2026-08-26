@@ -121,14 +121,17 @@ export default function CustomerHomePage() {
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
             
             <div className="lg:col-span-7 space-y-4">
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs font-bold uppercase tracking-wider">
-                <Flame className="w-3.5 h-3.5" /> Authentic Taste • Fast Delivery
+              <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs font-black tracking-wide">
+                <Flame className="w-3.5 h-3.5 text-amber-400" /> Ap OK Karien, Bas
               </div>
               <h1 className="text-3xl sm:text-5xl font-black text-white tracking-tight leading-tight">
-                Taste That Brings <span className="text-amber-400">You Back!</span>
+                OK <span className="text-amber-400">RESTAURANT</span>
+                <span className="block text-2xl sm:text-3xl font-bold text-amber-300/90 font-serif italic mt-1.5">
+                  “Ap OK Karien, Bas”
+                </span>
               </h1>
               <p className="text-xs sm:text-sm text-slate-400 max-w-xl leading-relaxed">
-                Experience Jampur&apos;s most loved fast food, pizzas, traditional chicken & mutton karahi, sizzlers and exclusive deals right at your fingertips.
+                Experience South Punjab&apos;s finest dining and fast delivery across Dera Chungi, Sherifalon Bypass, and Kot Chuta branches.
               </p>
 
               {/* Branch capabilities info card */}

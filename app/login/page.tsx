@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Utensils, Lock, Mail, User, Phone, ArrowLeft, AlertCircle } from 'lucide-react';
 import { AuthService } from '@/lib/services/auth-service';
+import { Logo } from '@/components/Logo';
 
 export default function CustomerLoginPage() {
   const router = useRouter();
@@ -47,16 +48,11 @@ export default function CustomerLoginPage() {
 
         <div className="bg-slate-900 border border-slate-800 rounded-3xl p-8 space-y-6 shadow-2xl">
           
-          <div className="text-center space-y-2">
-            <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-amber-600 to-amber-400 p-0.5 mx-auto shadow-lg shadow-amber-500/20">
-              <div className="w-full h-full bg-slate-950 rounded-[14px] flex items-center justify-center">
-                <Utensils className="w-7 h-7 text-amber-400" />
-              </div>
-            </div>
-            <h1 className="text-2xl font-black text-white">
+          <div className="text-center space-y-3">
+            <Logo size="lg" variant="badge" className="mx-auto" />
+            <h1 className="text-xl font-black text-white pt-2 border-t border-slate-800/80">
               {isRegister ? 'Create Customer Account' : 'Customer Sign In'}
             </h1>
-            <p className="text-xs text-slate-400">OK RESTAURANT JAMPUR</p>
           </div>
 
           {error && (

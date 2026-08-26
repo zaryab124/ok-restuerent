@@ -2,8 +2,8 @@ import type { Metadata } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'OK Restaurant — Taste That Brings You Back',
-  description: 'Multi-branch food ordering platform for OK Restaurant (Dera Chungi, Sherifalon Bypass, Kot Chuta). Order burgers, pizzas, karahi, deals & more!',
+  title: 'OK Restaurant — Ap OK Karien, Bas',
+  description: 'Official multi-branch food ordering platform for OK Restaurant (Dera Chungi, Sherifalon Bypass, Kot Chuta). Ap OK Karien, Bas!',
 };
 
 export default function RootLayout({

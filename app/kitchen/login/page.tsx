@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ChefHat, ArrowLeft, AlertCircle } from 'lucide-react';
 import { AuthService } from '@/lib/services/auth-service';
+import { Logo } from '@/components/Logo';
 
 export default function KitchenLoginPage() {
   const router = useRouter();
@@ -36,12 +37,11 @@ export default function KitchenLoginPage() {
         </Link>
 
         <div className="bg-slate-900 border border-slate-800 rounded-3xl p-8 space-y-6 shadow-2xl">
-          <div className="text-center space-y-2">
-            <div className="w-14 h-14 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 mx-auto">
-              <ChefHat className="w-8 h-8" />
-            </div>
-            <h1 className="text-xl font-black text-white">KITCHEN KDS LOGIN</h1>
-            <p className="text-xs text-slate-400">Authorized Kitchen Staff Only</p>
+          <div className="text-center space-y-3">
+            <Logo size="lg" variant="badge" className="mx-auto" />
+            <h1 className="text-lg font-black text-white pt-2 border-t border-slate-800/80 flex items-center justify-center gap-2">
+              <ChefHat className="w-5 h-5 text-amber-400" /> KITCHEN DISPLAY (KDS)
+            </h1>
           </div>
 
           {error && (
