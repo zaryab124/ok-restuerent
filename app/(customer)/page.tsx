@@ -131,7 +131,7 @@ export default function CustomerHomePage() {
                 </span>
               </h1>
               <p className="text-xs sm:text-sm text-slate-400 max-w-xl leading-relaxed">
-                Experience South Punjab&apos;s finest dining and fast delivery across Dera Chungi, Sherifalon Bypass, and Kot Chuta branches.
+                Experience South Punjab&apos;s finest dining and fast delivery across Dera Chungi, Main Bypass Jampur, and Kot Chuta branches.
               </p>
 
               {/* Branch capabilities info card */}
@@ -345,7 +345,7 @@ export default function CustomerHomePage() {
         <div className="max-w-7xl mx-auto px-4 space-y-2">
           <p>© {new Date().getFullYear()} OK RESTAURANT JAMPUR. All Rights Reserved.</p>
           <p className="text-[11px] text-slate-600">
-            Dera Chungi • Sherifalon Bypass Road • Kot Chuta / Appo Chuta
+            Dera Chungi • Main Bypass Jampur • Kot Chuta / Appo Chuta
           </p>
         </div>
       </footer>

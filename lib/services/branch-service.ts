@@ -1,6 +1,14 @@
 import { Branch, BranchCapability } from '../types';
 import { supabase } from '../supabase/client';
 
+function formatBranchDisplayName(name: string): string {
+  if (!name) return name;
+  if (name.includes('Sherifalon')) {
+    return 'Main Bypass Jampur';
+  }
+  return name;
+}
+
 export class BranchService {
   static async getBranches(): Promise<(Branch & { capabilities: BranchCapability })[]> {
     if (!supabase) {
@@ -21,7 +29,7 @@ export class BranchService {
       const cap = Array.isArray(b.capabilities) ? b.capabilities[0] : b.capabilities;
       return {
         id: b.id,
-        name: b.name,
+        name: formatBranchDisplayName(b.name),
         slug: b.slug,
         address: b.address,
         phone: b.phone,
@@ -57,7 +65,7 @@ export class BranchService {
     const cap = Array.isArray(data.capabilities) ? data.capabilities[0] : data.capabilities;
     return {
       id: data.id,
-      name: data.name,
+      name: formatBranchDisplayName(data.name),
       slug: data.slug,
       address: data.address,
       phone: data.phone,
@@ -92,7 +100,7 @@ export class BranchService {
     const cap = Array.isArray(data.capabilities) ? data.capabilities[0] : data.capabilities;
     return {
       id: data.id,
-      name: data.name,
+      name: formatBranchDisplayName(data.name),
       slug: data.slug,
       address: data.address,
       phone: data.phone,

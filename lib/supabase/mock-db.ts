@@ -18,9 +18,9 @@ export const INITIAL_BRANCHES: (Branch & { capabilities: BranchCapability })[] =
   },
   {
     id: 'b2000000-0000-0000-0000-000000000002',
-    name: 'Sherifalon Bypass Road',
+    name: 'Main Bypass Jampur',
     slug: 'sherifalon-bypass',
-    address: 'Sherifalon Bypass Road, Jampur',
+    address: 'Main Bypass Jampur Road, Jampur',
     phone: '0336-4683344',
     is_active: true,
     capabilities: {
@@ -229,18 +229,18 @@ export const DEMO_USERS: Profile[] = [
 
   // BRANCH ADMINS FOR EVERY BRANCH
   { id: 'u-admin-dera', email: 'admin.dera@okrestaurant.com', full_name: 'Tariq Admin (Dera Chungi Branch)', phone: '0334-4683344', role: 'BRANCH_ADMIN', password: 'okaykarubas12390' },
-  { id: 'u-admin-sherifalon', email: 'admin.sherifalon@okrestaurant.com', full_name: 'Sajjad Admin (Sherifalon Bypass Branch)', phone: '0336-4683344', role: 'BRANCH_ADMIN', password: 'okaykarubas12390' },
+  { id: 'u-admin-sherifalon', email: 'admin.sherifalon@okrestaurant.com', full_name: 'Sajjad Admin (Main Bypass Jampur Branch)', phone: '0336-4683344', role: 'BRANCH_ADMIN', password: 'okaykarubas12390' },
   { id: 'u-admin-kotchuta', email: 'admin.kotchuta@okrestaurant.com', full_name: 'Rashid Admin (Kot Chuta Branch)', phone: '0333-2225757', role: 'BRANCH_ADMIN', password: 'okaykarubas12390' },
 
   // KITCHEN STAFF FOR EVERY BRANCH
   { id: 'u-kitchen-dera', email: 'kitchen.dera@okrestaurant.com', full_name: 'Chef Ahmad (Dera Chungi Kitchen)', phone: '0300-1112233', role: 'KITCHEN', password: 'okaykarubas12390' },
-  { id: 'u-kitchen-sherifalon', email: 'kitchen.sherifalon@okrestaurant.com', full_name: 'Chef Bilal (Sherifalon Kitchen)', phone: '0300-4445566', role: 'KITCHEN', password: 'okaykarubas12390' },
+  { id: 'u-kitchen-sherifalon', email: 'kitchen.sherifalon@okrestaurant.com', full_name: 'Chef Bilal (Main Bypass Jampur Kitchen)', phone: '0300-4445566', role: 'KITCHEN', password: 'okaykarubas12390' },
   { id: 'u-kitchen-kotchuta', email: 'kitchen.kotchuta@okrestaurant.com', full_name: 'Chef Tariq (Kot Chuta Kitchen)', phone: '0300-7778899', role: 'KITCHEN', password: 'okaykarubas12390' },
 
   // RIDERS FOR EVERY BRANCH
   { id: 'u-rider1-dera', email: 'rider1.dera@okrestaurant.com', full_name: 'Ali Rider (Dera Delivery)', phone: '0301-9998877', role: 'RIDER', password: 'okaykarubas12390' },
   { id: 'u-rider2-dera', email: 'rider2.dera@okrestaurant.com', full_name: 'Hamza Rider (Dera Delivery)', phone: '0301-3332211', role: 'RIDER', password: 'okaykarubas12390' },
-  { id: 'u-rider-sherifalon', email: 'rider.sherifalon@okrestaurant.com', full_name: 'Zubair Rider (Sherifalon Delivery)', phone: '0301-6665544', role: 'RIDER', password: 'okaykarubas12390' },
+  { id: 'u-rider-sherifalon', email: 'rider.sherifalon@okrestaurant.com', full_name: 'Zubair Rider (Main Bypass Jampur Delivery)', phone: '0301-6665544', role: 'RIDER', password: 'okaykarubas12390' },
   { id: 'u-rider-kotchuta', email: 'rider.kotchuta@okrestaurant.com', full_name: 'Imran Rider (Kot Chuta Delivery)', phone: '0301-8887766', role: 'RIDER', password: 'okaykarubas12390' },
 
   // DEMO CUSTOMER

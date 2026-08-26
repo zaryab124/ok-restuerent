@@ -12,7 +12,7 @@ describe('Branch Capability & Delivery Validation Tests', () => {
     expect(isAllowed).toBe(true);
   });
 
-  test('Sherifalon Bypass Road rejects delivery', async () => {
+  test('Main Bypass Jampur rejects delivery', async () => {
     jest.spyOn(BranchService, 'isDeliveryAllowed').mockResolvedValueOnce(false);
     const isAllowed = await BranchService.isDeliveryAllowed('b2000000-0000-0000-0000-000000000002');
     expect(isAllowed).toBe(false);
@@ -29,11 +29,11 @@ describe('Branch Capability & Delivery Validation Tests', () => {
 
     await expect(
       OrderService.createOrder({
-        branchId: 'b2000000-0000-0000-0000-000000000002', // Sherifalon (No Delivery)
+        branchId: 'b2000000-0000-0000-0000-000000000002', // Main Bypass Jampur (No Delivery)
         customerName: 'Test User',
         customerPhone: '03001234567',
         orderType: 'DELIVERY',
-        deliveryAddress: 'Main St, Sherifalon',
+        deliveryAddress: 'Main Bypass Jampur Road, Jampur',
         items: [
           {
             menuItem: {
