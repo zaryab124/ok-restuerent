@@ -1,8 +1,8 @@
 -- ==============================================================================
--- OK RESTAURANT PLATFORM - 010 SINGLE CANONICAL CREATE_ORDER_ATOMIC
+-- OK RESTAURANT PLATFORM - 010 SINGLE CANONICAL CREATE_ORDER_ATOMIC (VERIFIED SCHEMAS)
 -- ==============================================================================
 
--- 1. DROP ALL PREVIOUS OVERLOADS TO ELIMINATE AMBIGUITY
+-- 1. DROP ALL PREVIOUS OVERLOADS TO ELIMINATE CONFLICT
 DROP FUNCTION IF EXISTS public.create_order_atomic(UUID, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, JSONB);
 DROP FUNCTION IF EXISTS public.create_order_atomic(UUID, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, JSONB, UUID);
 DROP FUNCTION IF EXISTS public.create_order_atomic(UUID, TEXT, TEXT, TEXT, UUID, TEXT, TEXT, TEXT, JSONB);
@@ -13,7 +13,7 @@ DROP FUNCTION IF EXISTS public.create_order_atomic(p_branch_id UUID, p_customer_
 UPDATE public.branch_capabilities 
 SET delivery_enabled = TRUE, dine_in_enabled = TRUE, takeaway_enabled = TRUE;
 
--- 3. CREATE THE SINGLE CANONICAL FUNCTION
+-- 3. INSTALL THE EXACT SCHEMA-MATCHED CANONICAL FUNCTION
 CREATE OR REPLACE FUNCTION public.create_order_atomic(
     p_branch_id UUID,
     p_customer_name TEXT,
@@ -50,11 +50,8 @@ DECLARE
     v_item_subtotal NUMERIC(10,2);
     v_is_available BOOLEAN;
     v_caller_id UUID := auth.uid();
-    v_effective_user_id UUID;
     v_zone_fee NUMERIC(10,2);
 BEGIN
-    v_effective_user_id := COALESCE(v_caller_id, '00000000-0000-0000-0000-000000000000'::UUID);
-
     -- 1. Input Validations
     IF p_customer_name IS NULL OR TRIM(p_customer_name) = '' THEN
         RAISE EXCEPTION 'Customer name is required.';
@@ -106,7 +103,7 @@ BEGIN
     -- 4. Generate Order Number
     v_order_number := 'OK-' || TO_CHAR(NOW(), 'YYYYMMDD') || '-' || UPPER(SUBSTRING(gen_random_uuid()::text, 1, 6));
 
-    -- 5. Insert Order Record
+    -- 5. Insert Order Header
     INSERT INTO public.orders (
         id,
         order_number,
@@ -147,7 +144,7 @@ BEGIN
         NOW()
     );
 
-    -- 6. Insert Items & Calculate Totals
+    -- 6. Insert Order Items
     FOR v_item IN SELECT * FROM jsonb_array_elements(p_items)
     LOOP
         v_menu_item_id := (v_item->>'menu_item_id')::UUID;
@@ -210,7 +207,7 @@ BEGIN
 
     v_total := v_subtotal + v_delivery_fee;
 
-    -- 7. Update Totals
+    -- 7. Update Order Totals
     UPDATE public.orders
     SET 
         subtotal = v_subtotal,
@@ -218,17 +215,19 @@ BEGIN
         total_amount = v_total
     WHERE id = v_order_id;
 
-    -- 8. Status History
+    -- 8. Record Status History with Exact Schema Columns
     INSERT INTO public.order_status_history (
         order_id,
-        status,
-        notes,
-        created_by
+        from_status,
+        to_status,
+        changed_by_user_id,
+        notes
     ) VALUES (
         v_order_id,
+        NULL,
         'PENDING',
-        'Order placed successfully via Web Portal',
-        v_effective_user_id
+        v_caller_id,
+        'Order placed successfully via Web Portal'
     );
 
     out_order_id := v_order_id;
@@ -239,4 +238,5 @@ BEGIN
 END;
 $$;
 
+-- 4. GRANT EXECUTION PERMISSION
 GRANT EXECUTE ON FUNCTION public.create_order_atomic(UUID, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, JSONB, UUID) TO anon, authenticated, service_role;
