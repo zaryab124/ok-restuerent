@@ -73,6 +73,10 @@ export default function OwnerExecutivePortal() {
     loadOwnerData();
     MerchantConfigService.getConfig().then(setBankConfig);
 
+    const unsubscribe = OrderService.subscribe(() => {
+      loadOwnerData();
+    });
+
     const interval = setInterval(() => {
       loadOwnerData();
     }, 3000);

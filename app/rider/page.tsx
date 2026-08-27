@@ -45,6 +45,10 @@ export default function RiderPortal() {
 
     loadRiderData(riderInfo);
 
+    const unsubscribe = OrderService.subscribe(() => {
+      loadRiderData(riderInfo);
+    });
+
     const interval = setInterval(() => {
       loadRiderData(riderInfo);
     }, 3000);
