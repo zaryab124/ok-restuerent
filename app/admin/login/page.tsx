@@ -79,11 +79,99 @@ export default function AdminLoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-3.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black rounded-xl text-xs uppercase tracking-wider transition-all"
+              className="w-full py-3.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black rounded-xl text-xs uppercase tracking-wider transition-all cursor-pointer shadow-lg shadow-amber-500/20"
             >
               {loading ? 'Authenticating...' : 'Sign In as Branch Admin'}
             </button>
           </form>
+
+          {/* Quick Demo 1-Click Sign-in */}
+          <div className="pt-4 border-t border-slate-800 space-y-3">
+            <p className="text-[11px] font-bold text-slate-400 text-center uppercase tracking-wider">
+              ⚡ Quick Demo 1-Click Sign-in
+            </p>
+            <div className="grid grid-cols-1 gap-2">
+              <button
+                type="button"
+                onClick={async () => {
+                  setEmail('admin.dera@okrestaurant.com');
+                  setPassword('okaykarubas12390');
+                  setLoading(true);
+                  try {
+                    await AuthService.login('admin.dera@okrestaurant.com', 'okaykarubas12390', 'BRANCH_ADMIN');
+                    router.push('/admin');
+                  } catch (e: any) {
+                    setError(e.message || 'Login failed');
+                    setLoading(false);
+                  }
+                }}
+                className="w-full py-2.5 px-3 bg-slate-950 hover:bg-slate-800 border border-slate-700/60 rounded-xl text-xs font-bold text-amber-400 text-left flex items-center justify-between transition-all cursor-pointer"
+              >
+                <span>🏢 Dera Chungi Admin</span>
+                <span className="text-[10px] text-slate-400 font-mono">admin.dera@okrestaurant.com</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={async () => {
+                  setEmail('admin.sherifalon@okrestaurant.com');
+                  setPassword('okaykarubas12390');
+                  setLoading(true);
+                  try {
+                    await AuthService.login('admin.sherifalon@okrestaurant.com', 'okaykarubas12390', 'BRANCH_ADMIN');
+                    router.push('/admin');
+                  } catch (e: any) {
+                    setError(e.message || 'Login failed');
+                    setLoading(false);
+                  }
+                }}
+                className="w-full py-2.5 px-3 bg-slate-950 hover:bg-slate-800 border border-slate-700/60 rounded-xl text-xs font-bold text-amber-400 text-left flex items-center justify-between transition-all cursor-pointer"
+              >
+                <span>🏢 Main Bypass Jampur Admin</span>
+                <span className="text-[10px] text-slate-400 font-mono">admin.sherifalon@...</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={async () => {
+                  setEmail('admin.kotchuta@okrestaurant.com');
+                  setPassword('okaykarubas12390');
+                  setLoading(true);
+                  try {
+                    await AuthService.login('admin.kotchuta@okrestaurant.com', 'okaykarubas12390', 'BRANCH_ADMIN');
+                    router.push('/admin');
+                  } catch (e: any) {
+                    setError(e.message || 'Login failed');
+                    setLoading(false);
+                  }
+                }}
+                className="w-full py-2.5 px-3 bg-slate-950 hover:bg-slate-800 border border-slate-700/60 rounded-xl text-xs font-bold text-amber-400 text-left flex items-center justify-between transition-all cursor-pointer"
+              >
+                <span>🏢 Kot Chutta Admin</span>
+                <span className="text-[10px] text-slate-400 font-mono">admin.kotchuta@...</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={async () => {
+                  setEmail('owner@okrestaurant.com');
+                  setPassword('okaykarubas12390');
+                  setLoading(true);
+                  try {
+                    await AuthService.login('owner@okrestaurant.com', 'okaykarubas12390', 'OWNER');
+                    router.push('/admin');
+                  } catch (e: any) {
+                    setError(e.message || 'Login failed');
+                    setLoading(false);
+                  }
+                }}
+                className="w-full py-2.5 px-3 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 rounded-xl text-xs font-bold text-amber-300 text-left flex items-center justify-between transition-all cursor-pointer"
+              >
+                <span>👑 Restaurant Owner (All Branches)</span>
+                <span className="text-[10px] text-amber-400 font-mono">owner@okrestaurant.com</span>
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     </div>

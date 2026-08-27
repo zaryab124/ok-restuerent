@@ -79,11 +79,39 @@ export default function OwnerLoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-3.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black rounded-xl text-xs uppercase tracking-wider transition-all"
+              className="w-full py-3.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black rounded-xl text-xs uppercase tracking-wider transition-all cursor-pointer shadow-lg shadow-amber-500/20"
             >
               {loading ? 'Authenticating...' : 'Sign In to Owner Portal'}
             </button>
           </form>
+
+          {/* Quick Demo 1-Click Sign-in */}
+          <div className="pt-4 border-t border-slate-800 space-y-3">
+            <p className="text-[11px] font-bold text-slate-400 text-center uppercase tracking-wider">
+              ⚡ Quick Demo 1-Click Sign-in
+            </p>
+            <div className="grid grid-cols-1 gap-2">
+              <button
+                type="button"
+                onClick={async () => {
+                  setEmail('owner@okrestaurant.com');
+                  setPassword('okaykarubas12390');
+                  setLoading(true);
+                  try {
+                    await AuthService.login('owner@okrestaurant.com', 'okaykarubas12390', 'OWNER');
+                    router.push('/owner');
+                  } catch (e: any) {
+                    setError(e.message || 'Login failed');
+                    setLoading(false);
+                  }
+                }}
+                className="w-full py-2.5 px-3 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 rounded-xl text-xs font-bold text-amber-300 text-left flex items-center justify-between transition-all cursor-pointer"
+              >
+                <span>👑 Restaurant Owner (All Branches)</span>
+                <span className="text-[10px] text-amber-400 font-mono">owner@okrestaurant.com</span>
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     </div>

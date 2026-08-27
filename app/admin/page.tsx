@@ -129,23 +129,55 @@ export default function BranchAdminPortal() {
   }, [selectedBranchId, adminUser]);
 
   async function loadBranchData(branchId: string) {
-    const oList = await OrderService.getOrders(branchId === 'all' ? undefined : { branchId });
     const targetBranch = branchId === 'all' ? (adminUser?.branch_id || 'b1000000-0000-0000-0000-000000000001') : branchId;
-    const tList = await QRService.getTablesByBranch(targetBranch);
-    const mList = await MenuService.getMenuItems({ branchId: targetBranch });
-    const cList = await MenuService.getCategories();
-    const bList = await BuffetService.getActiveBuffets(targetBranch);
-    if (bList.length > 0) {
-      const bkList = await BuffetService.getBookingsForBuffet(bList[0].id);
-      setBuffetBookings(bkList);
+
+    try {
+      const oList = await OrderService.getOrders(branchId === 'all' ? undefined : { branchId });
+      setOrders(oList || []);
+    } catch (e) {
+      console.warn('Orders load fallback:', e);
     }
-    const zList = await DeliveryZoneService.getDeliveryZones(targetBranch, false).catch(() => []);
-    setOrders([...oList]);
-    setTables([...tList]);
-    setMenuItems([...mList]);
-    setCategories([...cList]);
-    setBuffets([...bList]);
-    setDeliveryZones([...zList]);
+
+    try {
+      const tList = await QRService.getTablesByBranch(targetBranch);
+      setTables(tList || []);
+    } catch (e) {
+      console.warn('Tables load fallback:', e);
+    }
+
+    try {
+      const mList = await MenuService.getMenuItems({ branchId: targetBranch });
+      setMenuItems(mList || []);
+    } catch (e) {
+      console.warn('Menu load fallback:', e);
+    }
+
+    try {
+      const cList = await MenuService.getCategories();
+      setCategories(cList || []);
+    } catch (e) {
+      console.warn('Categories load fallback:', e);
+    }
+
+    try {
+      const bList = await BuffetService.getActiveBuffets(targetBranch);
+      setBuffets(bList || []);
+      if (bList.length > 0) {
+        const bkList = await BuffetService.getBookingsForBuffet(bList[0].id);
+        setBuffetBookings(bkList || []);
+      } else {
+        setBuffetBookings([]);
+      }
+    } catch (e) {
+      console.warn('Buffets load fallback:', e);
+    }
+
+    try {
+      const zList = await DeliveryZoneService.getDeliveryZones(targetBranch, false);
+      setDeliveryZones(zList || []);
+    } catch (e) {
+      console.warn('Delivery zones load fallback:', e);
+    }
   }
 
   const handleUpdateStatus = async (orderId: string, nextStatus: OrderStatus) => {
@@ -407,30 +439,21 @@ export default function BranchAdminPortal() {
           </div>
 
           <div className="flex items-center gap-3">
-            {adminUser?.role === 'OWNER' ? (
-              <div className="flex items-center gap-2">
-                <MapPin className="w-4 h-4 text-amber-400 hidden sm:block" />
-                <select
-                  value={selectedBranchId}
-                  onChange={(e) => setSelectedBranchId(e.target.value)}
-                  className="bg-slate-950 border border-slate-800 text-xs font-bold text-amber-400 px-3 py-2 rounded-xl focus:outline-none"
-                >
-                  <option value="all">🌐 All Branches (All Orders)</option>
-                  {branches.map((b) => (
-                    <option key={b.id} value={b.id}>
-                      {b.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            ) : (
-              <div className="flex items-center gap-2 bg-slate-950 px-3 py-1.5 rounded-xl border border-slate-800">
-                <MapPin className="w-4 h-4 text-amber-400" />
-                <span className="text-xs font-bold text-white">
-                  {branches.find((b) => b.id === selectedBranchId)?.name || 'Assigned Branch'}
-                </span>
-              </div>
-            )}
+            <div className="flex items-center gap-2">
+              <MapPin className="w-4 h-4 text-amber-400 hidden sm:block" />
+              <select
+                value={selectedBranchId}
+                onChange={(e) => setSelectedBranchId(e.target.value)}
+                className="bg-slate-950 border border-slate-800 text-xs font-bold text-amber-400 px-3 py-2 rounded-xl focus:outline-none cursor-pointer"
+              >
+                <option value="all">🌐 All Branches (All Orders)</option>
+                {branches.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.name}
+                  </option>
+                ))}
+              </select>
+            </div>
             <button
               onClick={handleLogout}
               className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors"

@@ -79,11 +79,59 @@ export default function KitchenLoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-3.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black rounded-xl text-xs uppercase tracking-wider transition-all"
+              className="w-full py-3.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black rounded-xl text-xs uppercase tracking-wider transition-all cursor-pointer shadow-lg shadow-amber-500/20"
             >
               {loading ? 'Authenticating...' : 'Sign In to Kitchen KDS'}
             </button>
           </form>
+
+          {/* Quick Demo 1-Click Sign-in */}
+          <div className="pt-4 border-t border-slate-800 space-y-3">
+            <p className="text-[11px] font-bold text-slate-400 text-center uppercase tracking-wider">
+              ⚡ Quick Demo 1-Click Sign-in
+            </p>
+            <div className="grid grid-cols-1 gap-2">
+              <button
+                type="button"
+                onClick={async () => {
+                  setEmail('kitchen.dera@okrestaurant.com');
+                  setPassword('okaykarubas12390');
+                  setLoading(true);
+                  try {
+                    await AuthService.login('kitchen.dera@okrestaurant.com', 'okaykarubas12390', 'KITCHEN');
+                    router.push('/kitchen');
+                  } catch (e: any) {
+                    setError(e.message || 'Login failed');
+                    setLoading(false);
+                  }
+                }}
+                className="w-full py-2.5 px-3 bg-slate-950 hover:bg-slate-800 border border-slate-700/60 rounded-xl text-xs font-bold text-amber-400 text-left flex items-center justify-between transition-all cursor-pointer"
+              >
+                <span>👨‍🍳 Dera Chungi Kitchen</span>
+                <span className="text-[10px] text-slate-400 font-mono">kitchen.dera@...</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={async () => {
+                  setEmail('kitchen.sherifalon@okrestaurant.com');
+                  setPassword('okaykarubas12390');
+                  setLoading(true);
+                  try {
+                    await AuthService.login('kitchen.sherifalon@okrestaurant.com', 'okaykarubas12390', 'KITCHEN');
+                    router.push('/kitchen');
+                  } catch (e: any) {
+                    setError(e.message || 'Login failed');
+                    setLoading(false);
+                  }
+                }}
+                className="w-full py-2.5 px-3 bg-slate-950 hover:bg-slate-800 border border-slate-700/60 rounded-xl text-xs font-bold text-amber-400 text-left flex items-center justify-between transition-all cursor-pointer"
+              >
+                <span>👨‍🍳 Main Bypass Kitchen</span>
+                <span className="text-[10px] text-slate-400 font-mono">kitchen.sherifalon@...</span>
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     </div>

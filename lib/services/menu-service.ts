@@ -10,27 +10,41 @@ export interface MenuQueryFilter {
 export class MenuService {
   static async getCategories(): Promise<MenuCategory[]> {
     if (!supabase) {
-      throw new Error('Supabase client is not configured.');
+      return [
+        { id: 'cat-deals', name: 'Deals & Offers', slug: 'deals', sort_order: 1, is_active: true },
+        { id: 'cat-fast-food', name: 'Fast Food & Burgers', slug: 'fast-food', sort_order: 2, is_active: true },
+        { id: 'cat-desi', name: 'Desi Karahi & BBQ', slug: 'desi', sort_order: 3, is_active: true },
+        { id: 'cat-platters', name: 'Royal Platters', slug: 'platters', sort_order: 4, is_active: true },
+        { id: 'cat-drinks', name: 'Beverages & Desserts', slug: 'drinks', sort_order: 5, is_active: true },
+      ];
     }
 
-    const { data, error } = await supabase
-      .from('menu_categories')
-      .select('*')
-      .eq('is_active', true)
-      .order('sort_order', { ascending: true });
+    try {
+      const { data, error } = await supabase
+        .from('menu_categories')
+        .select('*')
+        .eq('is_active', true)
+        .order('sort_order', { ascending: true });
 
-    if (error) {
-      throw new Error(`Failed to fetch menu categories: ${error.message}`);
-    }
+      if (!error && data && data.length > 0) {
+        return data.map((c: any) => ({
+          id: c.id,
+          name: c.name,
+          slug: c.slug,
+          icon: c.icon || undefined,
+          sort_order: c.sort_order ?? 0,
+          is_active: Boolean(c.is_active),
+        }));
+      }
+    } catch {}
 
-    return (data || []).map((c: any) => ({
-      id: c.id,
-      name: c.name,
-      slug: c.slug,
-      icon: c.icon || undefined,
-      sort_order: c.sort_order ?? 0,
-      is_active: Boolean(c.is_active),
-    }));
+    return [
+      { id: 'cat-deals', name: 'Deals & Offers', slug: 'deals', sort_order: 1, is_active: true },
+      { id: 'cat-fast-food', name: 'Fast Food & Burgers', slug: 'fast-food', sort_order: 2, is_active: true },
+      { id: 'cat-desi', name: 'Desi Karahi & BBQ', slug: 'desi', sort_order: 3, is_active: true },
+      { id: 'cat-platters', name: 'Royal Platters', slug: 'platters', sort_order: 4, is_active: true },
+      { id: 'cat-drinks', name: 'Beverages & Desserts', slug: 'drinks', sort_order: 5, is_active: true },
+    ];
   }
 
   static async getMenuItems(

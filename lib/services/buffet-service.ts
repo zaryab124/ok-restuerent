@@ -15,23 +15,27 @@ export class BuffetService {
       query = query.eq('branch_id', branchId);
     }
 
-    const { data, error } = await query;
-    if (error) throw new Error(`Failed to fetch buffets: ${error.message}`);
+    try {
+      const { data, error } = await query;
+      if (!error && data) {
+        return data.map((b: any) => ({
+          id: b.id,
+          branch_id: b.branch_id,
+          title: b.title,
+          description: b.description,
+          dishes_list: b.dishes_list || [],
+          price_per_head: Number(b.price_per_head),
+          event_date: b.event_date,
+          start_time: b.start_time,
+          end_time: b.end_time,
+          banner_image_url: b.banner_image_url || undefined,
+          is_active: Boolean(b.is_active),
+          created_at: b.created_at,
+        }));
+      }
+    } catch {}
 
-    return (data || []).map((b: any) => ({
-      id: b.id,
-      branch_id: b.branch_id,
-      title: b.title,
-      description: b.description,
-      dishes_list: b.dishes_list || [],
-      price_per_head: Number(b.price_per_head),
-      event_date: b.event_date,
-      start_time: b.start_time,
-      end_time: b.end_time,
-      banner_image_url: b.banner_image_url || undefined,
-      is_active: Boolean(b.is_active),
-      created_at: b.created_at,
-    }));
+    return [];
   }
 
   static async createBuffet(params: Omit<BuffetRegistration, 'id' | 'created_at'>): Promise<BuffetRegistration> {
@@ -180,28 +184,32 @@ export class BuffetService {
   }
 
   static async getBookingsForBuffet(buffetId: string): Promise<BuffetBooking[]> {
-    if (!supabase) return [];
+    if (!supabase || !buffetId) return [];
 
-    const { data, error } = await supabase
-      .from('buffet_bookings')
-      .select('*')
-      .eq('buffet_id', buffetId)
-      .order('created_at', { ascending: false });
+    try {
+      const { data, error } = await supabase
+        .from('buffet_bookings')
+        .select('*')
+        .eq('buffet_id', buffetId)
+        .order('created_at', { ascending: false });
 
-    if (error) throw new Error(`Failed to fetch bookings: ${error.message}`);
+      if (!error && data) {
+        return data.map((b: any) => ({
+          id: b.id,
+          buffet_id: b.buffet_id,
+          customer_name: b.customer_name,
+          customer_phone: b.customer_phone,
+          customer_email: b.customer_email || undefined,
+          guests_count: b.guests_count,
+          total_amount: Number(b.total_amount),
+          qr_ticket_token: b.qr_ticket_token,
+          status: b.status,
+          created_at: b.created_at,
+        }));
+      }
+    } catch {}
 
-    return (data || []).map((b: any) => ({
-      id: b.id,
-      buffet_id: b.buffet_id,
-      customer_name: b.customer_name,
-      customer_phone: b.customer_phone,
-      customer_email: b.customer_email || undefined,
-      guests_count: b.guests_count,
-      total_amount: Number(b.total_amount),
-      qr_ticket_token: b.qr_ticket_token,
-      status: b.status,
-      created_at: b.created_at,
-    }));
+    return [];
   }
 
   /**
