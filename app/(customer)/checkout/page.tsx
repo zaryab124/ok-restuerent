@@ -4,9 +4,11 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, ShoppingBag, MapPin, Bike, Utensils, AlertCircle, CheckCircle, CreditCard, DollarSign, Smartphone, Landmark, Copy, Check } from 'lucide-react';
-import { Branch, OrderType, PaymentMethod, CartItem } from '@/lib/types';
+import { Branch, OrderType, PaymentMethod, CartItem, DeliveryZone } from '@/lib/types';
 import { BranchService } from '@/lib/services/branch-service';
 import { OrderService } from '@/lib/services/order-service';
+import { DeliveryZoneService } from '@/lib/services/delivery-zone-service';
+import { PaymentService } from '@/lib/services/payment-service';
 import { MerchantConfigService, MerchantBankConfig } from '@/lib/services/merchant-config-service';
 
 export default function CheckoutPage() {
@@ -19,6 +21,7 @@ export default function CheckoutPage() {
   const [deliveryAddress, setDeliveryAddress] = useState<string>('');
   const [deliveryNotes, setDeliveryNotes] = useState<string>('');
   const [tableNumber, setTableNumber] = useState<string>('');
+  const [tableId, setTableId] = useState<string | undefined>(undefined);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('CASH');
   const [onlineAccountMobile, setOnlineAccountMobile] = useState<string>('');
   const [merchantBankConfig, setMerchantBankConfig] = useState<MerchantBankConfig | null>(null);
@@ -27,11 +30,30 @@ export default function CheckoutPage() {
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [copiedText, setCopiedText] = useState<string | null>(null);
   const [isDeliverySupported, setIsDeliverySupported] = useState<boolean>(true);
+  const [deliveryZones, setDeliveryZones] = useState<DeliveryZone[]>([]);
+  const [selectedZoneId, setSelectedZoneId] = useState<string>('');
+  const [loadingZones, setLoadingZones] = useState<boolean>(false);
 
   useEffect(() => {
     BranchService.isDeliveryAllowed(selectedBranchId)
       .then((v) => setIsDeliverySupported(v))
       .catch(() => setIsDeliverySupported(false));
+
+    setLoadingZones(true);
+    DeliveryZoneService.getDeliveryZones(selectedBranchId, true)
+      .then((zones) => {
+        setDeliveryZones(zones);
+        if (zones.length > 0) {
+          setSelectedZoneId((prev) => (zones.some((z) => z.id === prev) ? prev : zones[0].id));
+        } else {
+          setSelectedZoneId('');
+        }
+      })
+      .catch(() => {
+        setDeliveryZones([]);
+        setSelectedZoneId('');
+      })
+      .finally(() => setLoadingZones(false));
   }, [selectedBranchId]);
 
   useEffect(() => {
@@ -55,6 +77,7 @@ export default function CheckoutPage() {
       try {
         const parsed = JSON.parse(savedQr);
         if (parsed.branchId) setSelectedBranchId(parsed.branchId);
+        if (parsed.tableId) setTableId(parsed.tableId);
         if (parsed.tableNumber) {
           setTableNumber(parsed.tableNumber);
           setOrderType('DINE_IN');
@@ -66,11 +89,14 @@ export default function CheckoutPage() {
   const activeBranch = branches.find((b) => b.id === selectedBranchId);
 
   const subtotal = cart.reduce((sum, item) => {
-    const price = item.variant ? item.variant.price : item.menuItem.base_price;
+    const price = item.variant ? item.variant.price : (item.menuItem.price ?? item.menuItem.base_price);
     return sum + price * item.quantity;
   }, 0);
 
-  const deliveryFee = orderType === 'DELIVERY' ? 100 : 0;
+  const selectedZone = deliveryZones.find((z) => z.id === selectedZoneId) || (deliveryZones.length > 0 ? deliveryZones[0] : null);
+  const deliveryFee = orderType === 'DELIVERY' && selectedZone ? selectedZone.delivery_fee : 0;
+  const isBelowMinOrder = orderType === 'DELIVERY' && selectedZone && subtotal < selectedZone.minimum_order_amount;
+  const minOrderShortage = isBelowMinOrder && selectedZone ? selectedZone.minimum_order_amount - subtotal : 0;
   const totalAmount = subtotal + deliveryFee;
 
   const copyToClipboard = (text: string) => {
@@ -93,14 +119,23 @@ export default function CheckoutPage() {
       return;
     }
 
-    if (orderType === 'DELIVERY' && !isDeliverySupported) {
-      setError('Delivery is currently unavailable at this branch. Please select takeaway or dining in.');
-      return;
-    }
-
-    if (orderType === 'DELIVERY' && !deliveryAddress) {
-      setError('Please enter a valid delivery address.');
-      return;
+    if (orderType === 'DELIVERY') {
+      if (!isDeliverySupported) {
+        setError('Delivery is currently unavailable at this branch. Please select takeaway or dining in.');
+        return;
+      }
+      if (deliveryZones.length === 0) {
+        setError('No delivery zones are configured for this branch. Please select takeaway or contact the restaurant.');
+        return;
+      }
+      if (isBelowMinOrder && selectedZone) {
+        setError(`Minimum order amount for delivery to "${selectedZone.name}" is Rs. ${selectedZone.minimum_order_amount}. Please add Rs. ${minOrderShortage} more to your cart.`);
+        return;
+      }
+      if (!deliveryAddress) {
+        setError('Please enter a valid delivery address.');
+        return;
+      }
     }
 
     setSubmitting(true);
@@ -110,7 +145,8 @@ export default function CheckoutPage() {
         customerName,
         customerPhone,
         orderType,
-        tableId: orderType === 'DINE_IN' ? tableNumber : undefined,
+        tableId: orderType === 'DINE_IN' ? (tableId || tableNumber) : undefined,
+        deliveryZoneId: orderType === 'DELIVERY' ? (selectedZoneId || selectedZone?.id) : undefined,
         deliveryAddress: orderType === 'DELIVERY' ? deliveryAddress : undefined,
         deliveryNotes,
         items: cart,
@@ -119,7 +155,30 @@ export default function CheckoutPage() {
 
       localStorage.removeItem('ok_cart');
       localStorage.removeItem('ok_qr_session');
-      router.push(`/order-tracking/${order.tracking_token || order.id}`);
+
+      // 1. CASH Orders: Immediate order confirmation with PENDING payment settled on counter/delivery
+      if (paymentMethod === 'CASH') {
+        router.push(`/order-tracking/${order.tracking_token || order.id}`);
+        return;
+      }
+
+      // 2. Online Payment Gateway (SAFEPAY, CARD, JAZZCASH, EASYPAISA, ONLINE)
+      const checkoutRes = await PaymentService.processPayment(
+        order.total_amount,
+        paymentMethod,
+        {
+          name: customerName,
+          phone: customerPhone,
+          orderId: order.id,
+        }
+      );
+
+      if (checkoutRes.success && checkoutRes.checkoutUrl) {
+        // Authoritative redirect to Safepay hosted checkout
+        window.location.href = checkoutRes.checkoutUrl;
+      } else {
+        router.push(`/order-tracking/${order.tracking_token || order.id}?payment_warning=${encodeURIComponent(checkoutRes.message || 'Payment processing')}`);
+      }
     } catch (err: any) {
       setError(err.message || 'Failed to submit order.');
       setSubmitting(false);
@@ -283,10 +342,75 @@ export default function CheckoutPage() {
 
                   {orderType === 'DELIVERY' && (
                     <>
+                      {/* Delivery Zone Selector */}
+                      <div className="space-y-2 pt-1 border-t border-slate-800">
+                        <div className="flex items-center justify-between">
+                          <label className="font-semibold text-slate-400 flex items-center gap-1.5">
+                            <MapPin className="w-3.5 h-3.5 text-amber-400" />
+                            Select Delivery Area / Zone
+                          </label>
+                          {selectedZone && (
+                            <span className="text-[11px] text-amber-400 font-bold">
+                              ETA: ~{selectedZone.estimated_delivery_minutes} mins
+                            </span>
+                          )}
+                        </div>
+
+                        {loadingZones ? (
+                          <div className="p-3 rounded-xl bg-slate-950 text-slate-500 text-xs animate-pulse">
+                            Loading delivery zones for {activeBranch?.name || 'branch'}...
+                          </div>
+                        ) : deliveryZones.length > 0 ? (
+                          <div className="grid grid-cols-1 gap-2">
+                            {deliveryZones.map((zone) => {
+                              const isSelected = (selectedZoneId || deliveryZones[0].id) === zone.id;
+                              return (
+                                <div
+                                  key={zone.id}
+                                  onClick={() => setSelectedZoneId(zone.id)}
+                                  className={`p-3 rounded-xl border cursor-pointer transition-all flex items-center justify-between ${
+                                    isSelected
+                                      ? 'bg-amber-500/10 border-amber-500 text-white shadow-md shadow-amber-500/10'
+                                      : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700'
+                                  }`}
+                                >
+                                  <div>
+                                    <span className="font-bold block text-white text-xs">{zone.name}</span>
+                                    <span className="text-[10px] text-slate-500">
+                                      Min. Order: Rs. {zone.minimum_order_amount} • ~{zone.estimated_delivery_minutes} mins
+                                    </span>
+                                  </div>
+                                  <div className="text-right">
+                                    <span className={`font-black text-xs ${isSelected ? 'text-amber-400' : 'text-slate-300'}`}>
+                                      + Rs. {zone.delivery_fee}
+                                    </span>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs">
+                            No active delivery zones configured for this branch.
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Minimum Order Warning Alert */}
+                      {isBelowMinOrder && selectedZone && (
+                        <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-start gap-2 animate-fadeIn">
+                          <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                          <div>
+                            <span className="font-bold block text-rose-200">Minimum Order Requirement</span>
+                            Delivery to <strong>{selectedZone.name}</strong> requires a minimum order of <strong>Rs. {selectedZone.minimum_order_amount}</strong>. Please add <strong>Rs. {minOrderShortage}</strong> more items to proceed.
+                          </div>
+                        </div>
+                      )}
+
                       <div className="space-y-1">
-                        <label className="font-semibold text-slate-400">Delivery Address</label>
+                        <label className="font-semibold text-slate-400">Street / House / Delivery Address</label>
                         <textarea
-                          placeholder="House number, Street, Area in Jampur..."
+                          placeholder="House number, Street, Near landmark in Jampur..."
                           value={deliveryAddress}
                           onChange={(e) => setDeliveryAddress(e.target.value)}
                           rows={2}
@@ -295,10 +419,10 @@ export default function CheckoutPage() {
                         />
                       </div>
                       <div className="space-y-1">
-                        <label className="font-semibold text-slate-400">Delivery Notes (Optional)</label>
+                        <label className="font-semibold text-slate-400">Delivery Notes / Landmark Instructions</label>
                         <input
                           type="text"
-                          placeholder="Ring bell twice, don't knock hard..."
+                          placeholder="e.g. Opposite Masjid, call on arrival..."
                           value={deliveryNotes}
                           onChange={(e) => setDeliveryNotes(e.target.value)}
                           className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-white focus:border-amber-500 focus:outline-none"
@@ -513,11 +637,17 @@ export default function CheckoutPage() {
 
                 <button
                   type="submit"
-                  disabled={submitting}
-                  className="w-full py-4 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 font-black rounded-xl text-xs uppercase tracking-wider shadow-lg shadow-amber-500/20 active:scale-95 transition-all mt-4"
+                  disabled={submitting || Boolean(isBelowMinOrder)}
+                  className={`w-full py-4 font-black rounded-xl text-xs uppercase tracking-wider shadow-lg active:scale-95 transition-all mt-4 ${
+                    isBelowMinOrder
+                      ? 'bg-slate-800 text-slate-500 cursor-not-allowed border border-rose-500/30'
+                      : 'bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 shadow-amber-500/20'
+                  }`}
                 >
                   {submitting
                     ? 'Processing Order...'
+                    : isBelowMinOrder && selectedZone
+                    ? `Min. Order Rs. ${selectedZone.minimum_order_amount} Required (+Rs. ${minOrderShortage})`
                     : paymentMethod === 'CASH'
                     ? 'Confirm Order (Cash on Delivery)'
                     : `Confirm & Submit Payment (Rs. ${totalAmount})`}

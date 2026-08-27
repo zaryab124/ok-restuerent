@@ -91,6 +91,7 @@ export class OrderService {
     customerPhone: string;
     orderType: OrderType;
     tableId?: string;
+    deliveryZoneId?: string;
     deliveryAddress?: string;
     deliveryNotes?: string;
     items: CartItem[];
@@ -101,7 +102,7 @@ export class OrderService {
       throw new Error('Supabase client is not configured.');
     }
 
-    const { branchId, customerName, customerPhone, orderType, tableId, deliveryAddress, deliveryNotes, items, paymentMethod } = params;
+    const { branchId, customerName, customerPhone, orderType, tableId, deliveryZoneId, deliveryAddress, deliveryNotes, items, paymentMethod } = params;
 
     if (items.length === 0) {
       throw new Error('Cannot create an order with an empty cart.');
@@ -131,6 +132,7 @@ export class OrderService {
       p_delivery_notes: deliveryNotes || null,
       p_payment_method: paymentMethod,
       p_items: itemsPayload,
+      p_delivery_zone_id: deliveryZoneId || null,
     });
 
     if (error) {
@@ -165,6 +167,7 @@ export class OrderService {
       customer_phone: customerPhone,
       order_type: orderType,
       table_id: tableId || undefined,
+      delivery_zone_id: deliveryZoneId || undefined,
       delivery_address: deliveryAddress || undefined,
       delivery_notes: deliveryNotes || undefined,
       subtotal: totalAmount,
@@ -399,8 +402,9 @@ export class OrderService {
   }
 
   private static mapRpcOrderRow(row: any): Order {
+    const rawAssignment = row.rider_assignment || row.rider_info;
     return {
-      id: row.order_id,
+      id: row.order_id || row.id,
       order_number: row.order_number,
       tracking_token: row.tracking_token,
       branch_id: row.branch_id,
@@ -417,10 +421,10 @@ export class OrderService {
       payment_status: row.payment_status,
       status: row.status,
       created_at: row.created_at,
-      updated_at: row.created_at,
+      updated_at: row.updated_at || row.created_at,
       items: (row.items || []).map((i: any) => ({
         id: i.id,
-        order_id: row.order_id,
+        order_id: i.order_id || row.order_id || row.id,
         menu_item_id: i.menu_item_id,
         variant_id: i.variant_id || undefined,
         item_name: i.item_name,
@@ -432,17 +436,17 @@ export class OrderService {
       })),
       history: (row.history || []).map((h: any) => ({
         id: h.id,
-        order_id: row.order_id,
+        order_id: h.order_id || row.order_id || row.id,
         from_status: h.from_status || undefined,
         to_status: h.to_status,
         notes: h.notes || undefined,
         created_at: h.created_at,
       })),
-      rider_assignment: row.rider_info
+      rider_assignment: rawAssignment
         ? {
-            rider_id: row.rider_info.rider_id,
-            rider_name: row.rider_info.rider_name || 'Rider',
-            assigned_at: row.rider_info.assigned_at,
+            rider_id: rawAssignment.rider_id,
+            rider_name: rawAssignment.rider_name || 'Rider',
+            assigned_at: rawAssignment.assigned_at,
           }
         : undefined,
     };
@@ -487,51 +491,16 @@ export class OrderService {
       throw new Error('Supabase client is not configured.');
     }
 
-    // 1. Direct status update RPC (Guaranteed to write to DB and order_status_history)
-    let updateSuccess = false;
-    try {
-      const { data, error } = await supabase.rpc('update_order_status_direct', {
-        p_order_id: orderId,
-        p_new_status: newStatus,
-        p_user_id: userId || null,
-        p_notes: notes || null,
-      });
-      if (!error && data) {
-        updateSuccess = true;
-      }
-    } catch {}
+    // 1. Direct status update RPC enforcing PostgreSQL finite state machine rules
+    const { data, error } = await supabase.rpc('update_order_status_direct', {
+      p_order_id: orderId,
+      p_new_status: newStatus,
+      p_user_id: userId || null,
+      p_notes: notes || null,
+    });
 
-    // 2. Fallback to secure RPC
-    if (!updateSuccess) {
-      try {
-        const { error } = await supabase.rpc('update_order_status_secure', {
-          p_order_id: orderId,
-          p_new_status: newStatus,
-          p_notes: notes || null,
-        });
-        if (!error) updateSuccess = true;
-      } catch {}
-    }
-
-    // 3. Fallback direct table update
-    if (!updateSuccess) {
-      try {
-        const { error: directError } = await supabase
-          .from('orders')
-          .update({ status: newStatus, updated_at: new Date().toISOString() })
-          .eq('id', orderId);
-
-        if (!directError) {
-          updateSuccess = true;
-          try {
-            await supabase.from('order_status_history').insert({
-              order_id: orderId,
-              to_status: newStatus,
-              notes: notes || `Order marked ${newStatus}`,
-            });
-          } catch {}
-        }
-      } catch {}
+    if (error) {
+      throw new Error(`Order status update rejected: ${error.message}`);
     }
 
     const updated = await this.getOrderById(orderId).catch(() => null);
@@ -590,42 +559,21 @@ export class OrderService {
     return orderIds.length;
   }
 
-  static async claimOrderForRider(orderId: string, riderId: string, riderName?: string): Promise<boolean> {
+  static async claimOrderForRider(orderId: string, riderId?: string, riderName?: string): Promise<boolean> {
     if (!supabase) {
       throw new Error('Supabase client is not configured.');
     }
 
-    try {
-      const { data, error } = await supabase.rpc('claim_delivery_order', {
-        p_order_id: orderId,
-        p_rider_id: riderId,
-      });
-      if (!error && data) return true;
-    } catch {}
+    const { data, error } = await supabase.rpc('claim_delivery_order', {
+      p_order_id: orderId,
+      p_rider_id: riderId || null,
+    });
 
-    // Direct table fallback
-    try {
-      await supabase
-        .from('rider_assignments')
-        .insert({ order_id: orderId, rider_id: riderId, status: 'ACCEPTED' });
+    if (error) {
+      throw new Error(`Order claim rejected: ${error.message}`);
+    }
 
-      await supabase
-        .from('orders')
-        .update({ status: 'ASSIGNED', updated_at: new Date().toISOString() })
-        .eq('id', orderId);
-
-      try {
-        await supabase.from('order_status_history').insert({
-          order_id: orderId,
-          from_status: 'READY',
-          to_status: 'ASSIGNED',
-          changed_by_user_id: riderId,
-          notes: `Delivery order claimed by ${riderName || 'Rider'}`,
-        });
-      } catch {}
-    } catch {}
-
-    return true;
+    return Boolean(data);
   }
 }
 

@@ -7,9 +7,10 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "test": "jest --passWithNoTests --forceExit"
+    "test": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js --passWithNoTests --forceExit"
   },
   "dependencies": {
+    "@sfpy/node-sdk": "^3.0.2",
     "@supabase/ssr": "^0.4.0",
     "@supabase/supabase-js": "^2.44.0",
     "clsx": "^2.1.1",
@@ -22,6 +23,7 @@
     "tailwind-merge": "^2.3.0"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.8",
     "@types/jest": "^29.5.12",
     "@types/node": "^20.14.9",
     "@types/qrcode": "^1.5.5",

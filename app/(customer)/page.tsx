@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import Image from 'next/image';
-import { Search, Flame, Utensils, Pizza, CookingPot, Soup, Drumstick, Coffee, MapPin, Sparkles, Plus, Check } from 'lucide-react';
+import { Search, Flame, Utensils, Pizza, CookingPot, Soup, Drumstick, Coffee, MapPin, Sparkles, Plus, Check, Clock } from 'lucide-react';
 import { Branch, MenuCategory, MenuItem, CartItem, MenuItemVariant } from '@/lib/types';
 import { BranchService } from '@/lib/services/branch-service';
 import { MenuService } from '@/lib/services/menu-service';
@@ -27,7 +27,6 @@ export default function CustomerHomePage() {
     });
 
     MenuService.getCategories().then(setCategories);
-    MenuService.getMenuItems().then(setMenuItems);
 
     const savedCart = localStorage.getItem('ok_cart');
     if (savedCart) {
@@ -44,6 +43,15 @@ export default function CustomerHomePage() {
       } catch (e) {}
     }
   }, []);
+
+  // Fetch branch-specific menu whenever active branch changes
+  useEffect(() => {
+    if (activeBranch) {
+      MenuService.getMenuItems({ branchId: activeBranch.id }).then(setMenuItems);
+    } else {
+      MenuService.getMenuItems().then(setMenuItems);
+    }
+  }, [activeBranch]);
 
   useEffect(() => {
     localStorage.setItem('ok_cart', JSON.stringify(cart));
@@ -274,17 +282,32 @@ export default function CustomerHomePage() {
                     Multiple Sizes
                   </span>
                 )}
+                {!item.is_available && (
+                  <div className="absolute inset-0 bg-slate-950/70 backdrop-blur-[2px] flex items-center justify-center">
+                    <span className="bg-rose-600/90 text-white text-xs font-black px-3 py-1 rounded-full uppercase tracking-wider shadow-lg">
+                      Sold Out
+                    </span>
+                  </div>
+                )}
               </div>
 
               {/* Item Info */}
               <div className="p-4 flex-1 flex flex-col justify-between space-y-3">
                 <div>
-                  <h3
-                    onClick={() => setSelectedItemForModal(item)}
-                    className="font-bold text-base text-white group-hover:text-amber-400 transition-colors cursor-pointer"
-                  >
-                    {item.name}
-                  </h3>
+                  <div className="flex items-start justify-between gap-2">
+                    <h3
+                      onClick={() => setSelectedItemForModal(item)}
+                      className="font-bold text-base text-white group-hover:text-amber-400 transition-colors cursor-pointer"
+                    >
+                      {item.name}
+                    </h3>
+                    {item.preparation_time && (
+                      <span className="text-[10px] text-slate-400 font-semibold flex items-center gap-1 shrink-0 bg-slate-950 px-2 py-0.5 rounded-md border border-slate-800">
+                        <Clock className="w-3 h-3 text-amber-400" />
+                        {item.preparation_time}m
+                      </span>
+                    )}
+                  </div>
                   {item.description && (
                     <p className="text-xs text-slate-400 mt-1 line-clamp-2 leading-relaxed">
                       {item.description}
@@ -296,21 +319,33 @@ export default function CustomerHomePage() {
                   <div>
                     <span className="text-[10px] text-slate-500 uppercase font-semibold block">Price</span>
                     <span className="font-black text-base text-amber-400">
-                      Rs. {item.base_price} {item.has_variants ? '+' : ''}
+                      Rs. {item.price ?? item.base_price} {item.has_variants ? '+' : ''}
                     </span>
                   </div>
 
                   <button
+                    disabled={!item.is_available}
                     onClick={() => {
+                      if (!item.is_available) return;
                       if (item.has_variants) {
                         setSelectedItemForModal(item);
                       } else {
                         handleAddToCart(item);
                       }
                     }}
-                    className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-amber-500 text-amber-400 hover:text-slate-950 font-extrabold text-xs flex items-center gap-1.5 transition-all active:scale-95"
+                    className={`px-3.5 py-2 rounded-xl font-extrabold text-xs flex items-center gap-1.5 transition-all ${
+                      item.is_available
+                        ? 'bg-slate-800 hover:bg-amber-500 text-amber-400 hover:text-slate-950 active:scale-95'
+                        : 'bg-slate-950 text-slate-600 border border-slate-800 cursor-not-allowed'
+                    }`}
                   >
-                    <Plus className="w-3.5 h-3.5" /> Add
+                    {item.is_available ? (
+                      <>
+                        <Plus className="w-3.5 h-3.5" /> Add
+                      </>
+                    ) : (
+                      'Sold Out'
+                    )}
                   </button>
                 </div>
               </div>

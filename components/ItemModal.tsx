@@ -26,8 +26,9 @@ export const ItemModal: React.FC<Props> = ({ item, onClose, onAddToCart }) => {
 
   if (!item) return null;
 
-  const currentPrice = selectedVariant ? selectedVariant.price : item.base_price;
+  const currentPrice = selectedVariant ? selectedVariant.price : (item.price ?? item.base_price);
   const totalPrice = currentPrice * quantity;
+  const isAvailable = item.is_available && (!selectedVariant || selectedVariant.is_available !== false);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fadeIn">
@@ -65,6 +66,16 @@ export const ItemModal: React.FC<Props> = ({ item, onClose, onAddToCart }) => {
             {item.description && (
               <p className="text-xs text-slate-400 mt-2 leading-relaxed">{item.description}</p>
             )}
+            {item.preparation_time && (
+              <p className="text-[11px] text-amber-400/80 mt-1 font-semibold">
+                Estimated Prep Time: ~{item.preparation_time} mins
+              </p>
+            )}
+            {!item.is_available && (
+              <div className="mt-2 py-1.5 px-3 bg-rose-500/10 border border-rose-500/30 rounded-lg text-rose-400 text-xs font-bold">
+                ⚠️ Currently sold out / unavailable at this branch
+              </div>
+            )}
           </div>
 
           {/* Variants Selector if item has variants */}
@@ -74,12 +85,16 @@ export const ItemModal: React.FC<Props> = ({ item, onClose, onAddToCart }) => {
               <div className="grid grid-cols-2 gap-2">
                 {item.variants.map((v) => {
                   const isSelected = selectedVariant?.id === v.id;
+                  const isVarAvail = v.is_available !== false;
                   return (
                     <button
                       key={v.id}
+                      disabled={!isVarAvail}
                       onClick={() => setSelectedVariant(v)}
                       className={`p-3 rounded-xl border flex items-center justify-between text-xs font-bold transition-all ${
-                        isSelected
+                        !isVarAvail
+                          ? 'opacity-40 cursor-not-allowed bg-slate-950 border-slate-800 text-slate-600 line-through'
+                          : isSelected
                           ? 'bg-amber-500/10 border-amber-500 text-amber-400'
                           : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700'
                       }`}
@@ -112,29 +127,37 @@ export const ItemModal: React.FC<Props> = ({ item, onClose, onAddToCart }) => {
           <div className="flex items-center gap-4 pt-4 border-t border-slate-800">
             <div className="flex items-center gap-3 bg-slate-950 border border-slate-800 px-3 py-2 rounded-xl">
               <button
+                disabled={!isAvailable}
                 onClick={() => setQuantity(Math.max(1, quantity - 1))}
-                className="w-7 h-7 rounded-lg bg-slate-800 hover:bg-slate-700 flex items-center justify-center text-slate-300"
+                className="w-7 h-7 rounded-lg bg-slate-800 hover:bg-slate-700 flex items-center justify-center text-slate-300 disabled:opacity-30"
               >
                 <Minus className="w-3.5 h-3.5" />
               </button>
               <span className="font-extrabold text-sm w-6 text-center text-white">{quantity}</span>
               <button
+                disabled={!isAvailable}
                 onClick={() => setQuantity(quantity + 1)}
-                className="w-7 h-7 rounded-lg bg-slate-800 hover:bg-slate-700 flex items-center justify-center text-slate-300"
+                className="w-7 h-7 rounded-lg bg-slate-800 hover:bg-slate-700 flex items-center justify-center text-slate-300 disabled:opacity-30"
               >
                 <Plus className="w-3.5 h-3.5" />
               </button>
             </div>
 
             <button
+              disabled={!isAvailable}
               onClick={() => {
+                if (!isAvailable) return;
                 onAddToCart(item, selectedVariant, quantity, notes);
                 onClose();
               }}
-              className="flex-1 py-3 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 font-black rounded-xl text-sm flex items-center justify-center gap-2 shadow-lg shadow-amber-500/20 active:scale-95 transition-all"
+              className={`flex-1 py-3 font-black rounded-xl text-sm flex items-center justify-center gap-2 shadow-lg transition-all ${
+                isAvailable
+                  ? 'bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 shadow-amber-500/20 active:scale-95'
+                  : 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700'
+              }`}
             >
               <ShoppingBag className="w-4 h-4" />
-              Add to Cart • Rs. {totalPrice}
+              {isAvailable ? `Add to Cart • Rs. ${totalPrice}` : 'Sold Out at Branch'}
             </button>
           </div>
         </div>

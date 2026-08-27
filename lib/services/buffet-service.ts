@@ -1,4 +1,4 @@
-import { BuffetRegistration, BuffetBooking } from '../types';
+import { BuffetRegistration, BuffetBooking, BuffetCheckInResult } from '../types';
 import { supabase } from '../supabase/client';
 
 export class BuffetService {
@@ -72,74 +72,110 @@ export class BuffetService {
     };
   }
 
+  /**
+   * Server-authoritative buffet ticket booking.
+   * Total price (price_per_head * guests_count) is strictly computed in PostgreSQL.
+   */
   static async bookBuffetTicket(params: {
     buffetId: string;
     customerName: string;
     customerPhone: string;
     customerEmail?: string;
     guestsCount: number;
-    totalAmount: number;
+    totalAmount?: number; // Ignored for zero-trust security
   }): Promise<BuffetBooking> {
     if (!supabase) throw new Error('Supabase client is not configured.');
 
-    const randomHex = Array.from({ length: 8 }, () =>
-      Math.floor(Math.random() * 16).toString(16)
-    ).join('');
-    const token = `buffet_qr_${Date.now()}_${randomHex}`;
+    const { data, error } = await supabase.rpc('book_buffet_ticket_atomic', {
+      p_buffet_id: params.buffetId,
+      p_customer_name: params.customerName,
+      p_customer_phone: params.customerPhone,
+      p_customer_email: params.customerEmail || null,
+      p_guests_count: params.guestsCount,
+    });
 
-    const { data, error } = await supabase
-      .from('buffet_bookings')
-      .insert({
-        buffet_id: params.buffetId,
-        customer_name: params.customerName,
-        customer_phone: params.customerPhone,
-        customer_email: params.customerEmail || null,
-        guests_count: params.guestsCount,
-        total_amount: params.totalAmount,
-        qr_ticket_token: token,
-        status: 'CONFIRMED',
-      })
-      .select('*')
-      .single();
+    if (error) {
+      throw new Error(`Failed to book buffet ticket: ${error.message}`);
+    }
 
-    if (error) throw new Error(`Failed to book buffet ticket: ${error.message}`);
+    if (!data || data.length === 0) {
+      throw new Error('Buffet booking returned empty result.');
+    }
 
+    const row = data[0];
     return {
-      id: data.id,
-      buffet_id: data.buffet_id,
-      customer_name: data.customer_name,
-      customer_phone: data.customer_phone,
-      customer_email: data.customer_email || undefined,
-      guests_count: data.guests_count,
-      total_amount: Number(data.total_amount),
-      qr_ticket_token: data.qr_ticket_token,
-      status: data.status,
-      created_at: data.created_at,
+      id: row.out_booking_id,
+      buffet_id: params.buffetId,
+      customer_name: params.customerName,
+      customer_phone: params.customerPhone,
+      customer_email: params.customerEmail || undefined,
+      guests_count: params.guestsCount,
+      total_amount: Number(row.out_total_amount),
+      qr_ticket_token: row.out_qr_token,
+      status: 'PENDING',
+      created_at: new Date().toISOString(),
     };
   }
 
+  /**
+   * Safe public ticket lookup by QR token.
+   */
   static async getBookingByToken(token: string): Promise<BuffetBooking | null> {
     if (!supabase) return null;
 
-    const { data, error } = await supabase
-      .from('buffet_bookings')
-      .select('*')
-      .eq('qr_ticket_token', token)
-      .maybeSingle();
+    const { data, error } = await supabase.rpc('get_buffet_ticket_by_token', {
+      p_token: token.trim(),
+    });
 
-    if (error || !data) return null;
+    if (error || !data || data.length === 0) {
+      // Fallback query if direct RPC is initializing
+      const { data: fallback, error: fbErr } = await supabase
+        .from('buffet_bookings')
+        .select('*, buffet_registrations(*)')
+        .eq('qr_ticket_token', token.trim())
+        .maybeSingle();
 
+      if (fbErr || !fallback) return null;
+
+      return {
+        id: fallback.id,
+        buffet_id: fallback.buffet_id,
+        customer_name: fallback.customer_name,
+        customer_phone: fallback.customer_phone,
+        customer_email: fallback.customer_email || undefined,
+        guests_count: fallback.guests_count,
+        total_amount: Number(fallback.total_amount),
+        qr_ticket_token: fallback.qr_ticket_token,
+        status: fallback.status,
+        created_at: fallback.created_at,
+      };
+    }
+
+    const row = data[0];
     return {
-      id: data.id,
-      buffet_id: data.buffet_id,
-      customer_name: data.customer_name,
-      customer_phone: data.customer_phone,
-      customer_email: data.customer_email || undefined,
-      guests_count: data.guests_count,
-      total_amount: Number(data.total_amount),
-      qr_ticket_token: data.qr_ticket_token,
-      status: data.status,
-      created_at: data.created_at,
+      id: row.out_id,
+      buffet_id: row.out_buffet_id,
+      customer_name: row.out_customer_name,
+      customer_phone: row.out_customer_phone,
+      customer_email: row.out_customer_email || undefined,
+      guests_count: row.out_guests_count,
+      total_amount: Number(row.out_total_amount),
+      qr_ticket_token: row.out_qr_ticket_token,
+      status: row.out_status,
+      created_at: row.out_created_at,
+      buffet_registration: {
+        id: row.out_buffet_id,
+        branch_id: row.out_branch_id,
+        title: row.out_buffet_title,
+        description: '',
+        dishes_list: [],
+        price_per_head: Number(row.out_price_per_head),
+        event_date: row.out_event_date,
+        start_time: row.out_start_time,
+        end_time: row.out_end_time,
+        is_active: true,
+        created_at: row.out_created_at,
+      },
     };
   }
 
@@ -168,17 +204,49 @@ export class BuffetService {
     }));
   }
 
-  static async checkInBooking(token: string): Promise<boolean> {
+  /**
+   * Atomic, Server-Authorized Buffet Ticket Check-in.
+   * Enforces staff authorization, branch ownership, concurrency row locking, and writes an audit log.
+   */
+  static async checkInBooking(
+    token: string,
+    staffUserId: string,
+    branchId: string
+  ): Promise<BuffetCheckInResult> {
     if (!supabase) throw new Error('Supabase client is not configured.');
 
-    const { data, error } = await supabase
-      .from('buffet_bookings')
-      .update({ status: 'CHECKED_IN' })
-      .eq('qr_ticket_token', token)
-      .select('*')
-      .maybeSingle();
+    if (!token || !token.trim()) {
+      return { success: false, error: 'Please provide a valid ticket QR token.' };
+    }
 
-    if (error || !data) return false;
-    return true;
+    if (!staffUserId) {
+      return { success: false, error: 'Authentication required: Staff ID is missing.' };
+    }
+
+    if (!branchId) {
+      return { success: false, error: 'Branch identification is required for check-in.' };
+    }
+
+    const { data, error } = await supabase.rpc('check_in_buffet_ticket_atomic', {
+      p_qr_token: token.trim(),
+      p_staff_user_id: staffUserId,
+      p_branch_id: branchId,
+    });
+
+    if (error) {
+      return {
+        success: false,
+        error: error.message || 'Check-in validation failed.',
+      };
+    }
+
+    return {
+      success: true,
+      booking_id: data?.booking_id,
+      customer_name: data?.customer_name,
+      guests_count: data?.guests_count,
+      buffet_title: data?.buffet_title,
+      checked_in_at: data?.checked_in_at,
+    };
   }
 }

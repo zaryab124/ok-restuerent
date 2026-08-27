@@ -2,10 +2,11 @@
 
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ChefHat, Clock, CheckCircle, Utensils, MapPin, RefreshCw, Flame, Sparkles, LogOut, AlertCircle } from 'lucide-react';
-import { Branch, Order, OrderStatus } from '@/lib/types';
+import { ChefHat, Clock, CheckCircle, Utensils, MapPin, RefreshCw, Flame, Sparkles, LogOut, AlertCircle, Search, X } from 'lucide-react';
+import { Branch, Order, OrderStatus, MenuItem } from '@/lib/types';
 import { BranchService } from '@/lib/services/branch-service';
 import { OrderService } from '@/lib/services/order-service';
+import { MenuService } from '@/lib/services/menu-service';
 import { AuthService, AuthenticatedUser } from '@/lib/services/auth-service';
 
 export default function KitchenDisplaySystem() {
@@ -13,6 +14,9 @@ export default function KitchenDisplaySystem() {
   const [branches, setBranches] = useState<Branch[]>([]);
   const [selectedBranchId, setSelectedBranchId] = useState<string>('b1000000-0000-0000-0000-000000000001');
   const [orders, setOrders] = useState<Order[]>([]);
+  const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
+  const [isStockDrawerOpen, setIsStockDrawerOpen] = useState(false);
+  const [stockSearchQuery, setStockSearchQuery] = useState('');
   const [chefInfo, setChefInfo] = useState<AuthenticatedUser | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -46,6 +50,7 @@ export default function KitchenDisplaySystem() {
     if (!chefInfo) return;
 
     loadKitchenOrders(selectedBranchId);
+    loadKitchenMenu(selectedBranchId);
 
     const unsubscribe = OrderService.subscribe((updatedOrder) => {
       setOrders((prev) => {
@@ -71,6 +76,22 @@ export default function KitchenDisplaySystem() {
     const list = await OrderService.getOrders(branchId === 'all' ? undefined : { branchId });
     setOrders(list.filter((o) => ['CONFIRMED', 'PREPARING', 'READY'].includes(o.status)));
   }
+
+  async function loadKitchenMenu(branchId: string) {
+    const target = branchId === 'all' ? (chefInfo?.branch_id || 'b1000000-0000-0000-0000-000000000001') : branchId;
+    const items = await MenuService.getMenuItems({ branchId: target });
+    setMenuItems(items);
+  }
+
+  const handleToggleItemStock = async (menuItemId: string) => {
+    try {
+      const target = selectedBranchId === 'all' ? (chefInfo?.branch_id || 'b1000000-0000-0000-0000-000000000001') : selectedBranchId;
+      await MenuService.toggleBranchItemAvailability(target, menuItemId);
+      await loadKitchenMenu(selectedBranchId);
+    } catch (err: any) {
+      setErrorMessage(`Failed to update item availability: ${err.message}`);
+    }
+  };
 
   const handleUpdateStatus = async (orderId: string, nextStatus: OrderStatus) => {
     setErrorMessage(null);
@@ -128,7 +149,21 @@ export default function KitchenDisplaySystem() {
             </div>
           </div>
 
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setIsStockDrawerOpen(true)}
+              className={`px-3 py-2 rounded-xl text-xs font-black flex items-center gap-2 transition-all ${
+                menuItems.filter((i) => !i.is_available).length > 0
+                  ? 'bg-rose-500/20 text-rose-400 border border-rose-500/40 hover:bg-rose-500/30'
+                  : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
+              }`}
+            >
+              <Utensils className="w-4 h-4 text-amber-400" />
+              <span>
+                Stock Availability {menuItems.filter((i) => !i.is_available).length > 0 ? `(${menuItems.filter((i) => !i.is_available).length} Sold Out)` : ''}
+              </span>
+            </button>
+
             {chefInfo.role === 'OWNER' && (
               <div className="flex items-center gap-2 bg-slate-950 px-3 py-1.5 rounded-xl border border-slate-800">
                 <MapPin className="w-4 h-4 text-amber-400" />
@@ -147,7 +182,10 @@ export default function KitchenDisplaySystem() {
               </div>
             )}
             <button
-              onClick={() => loadKitchenOrders(selectedBranchId)}
+              onClick={() => {
+                loadKitchenOrders(selectedBranchId);
+                loadKitchenMenu(selectedBranchId);
+              }}
               className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-400 transition-colors"
               title="Refresh Orders"
             >
@@ -313,6 +351,96 @@ export default function KitchenDisplaySystem() {
         </div>
 
       </main>
+
+      {/* Item Stock Availability / 86 Drawer Modal */}
+      {isStockDrawerOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-xl w-full p-6 space-y-4 shadow-2xl flex flex-col max-h-[85vh]">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div>
+                <h3 className="text-lg font-black text-white flex items-center gap-2">
+                  <Utensils className="w-5 h-5 text-amber-400" />
+                  Kitchen 86 / Stock Manager
+                </h3>
+                <p className="text-xs text-slate-400">
+                  Toggle menu item availability for this branch instantly
+                </p>
+              </div>
+              <button
+                onClick={() => setIsStockDrawerOpen(false)}
+                className="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 flex items-center justify-center text-slate-300"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Search items */}
+            <div className="relative">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+              <input
+                type="text"
+                placeholder="Search items by name or code..."
+                value={stockSearchQuery}
+                onChange={(e) => setStockSearchQuery(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-4 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500"
+              />
+            </div>
+
+            {/* Item list with instant toggle */}
+            <div className="flex-1 overflow-y-auto space-y-2.5 pr-1">
+              {menuItems
+                .filter((item) =>
+                  item.name.toLowerCase().includes(stockSearchQuery.toLowerCase()) ||
+                  (item.item_code && item.item_code.toString().includes(stockSearchQuery))
+                )
+                .map((item) => (
+                  <div
+                    key={item.id}
+                    className={`p-3.5 rounded-2xl border flex items-center justify-between transition-all ${
+                      item.is_available
+                        ? 'bg-slate-950/80 border-slate-800'
+                        : 'bg-rose-950/20 border-rose-500/30'
+                    }`}
+                  >
+                    <div>
+                      <h4 className="font-bold text-xs text-white flex items-center gap-2">
+                        {item.name}
+                        {item.item_code && (
+                          <span className="text-[10px] text-amber-400 font-mono">#{item.item_code}</span>
+                        )}
+                      </h4>
+                      <div className="flex items-center gap-2 mt-0.5 text-[11px] text-slate-400">
+                        <span>Rs. {item.price ?? item.base_price}</span>
+                        <span>•</span>
+                        <span>~{item.preparation_time || 15}m prep</span>
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={() => handleToggleItemStock(item.id)}
+                      className={`px-3 py-1.5 rounded-xl font-black text-xs uppercase tracking-wider transition-all ${
+                        item.is_available
+                          ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 hover:bg-emerald-500/30'
+                          : 'bg-rose-500 text-white shadow-lg shadow-rose-500/20 hover:bg-rose-600'
+                      }`}
+                    >
+                      {item.is_available ? 'In Stock' : '86 / Sold Out'}
+                    </button>
+                  </div>
+                ))}
+            </div>
+
+            <div className="pt-2 border-t border-slate-800 text-center">
+              <button
+                onClick={() => setIsStockDrawerOpen(false)}
+                className="w-full py-2.5 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-xl text-xs"
+              >
+                Close Stock Manager
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

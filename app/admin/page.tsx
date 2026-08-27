@@ -4,13 +4,14 @@ import React, { useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
 import QRCode from 'qrcode';
 import { useRouter } from 'next/navigation';
-import { ShieldCheck, Utensils, QrCode, CheckCircle, XCircle, Clock, MapPin, Plus, Printer, RefreshCw, AlertCircle, ShoppingBag, Edit3, Trash2, Sparkles, Check, Camera, Image as ImageIcon, LogOut } from 'lucide-react';
-import { Branch, Order, RestaurantTable, MenuItem, BuffetRegistration, BuffetBooking, MenuCategory, OrderStatus } from '@/lib/types';
+import { ShieldCheck, Utensils, QrCode, CheckCircle, XCircle, Clock, MapPin, Plus, Printer, RefreshCw, AlertCircle, ShoppingBag, Edit3, Trash2, Sparkles, Check, Camera, Image as ImageIcon, LogOut, Bike } from 'lucide-react';
+import { Branch, Order, RestaurantTable, MenuItem, BuffetRegistration, BuffetBooking, MenuCategory, OrderStatus, DeliveryZone } from '@/lib/types';
 import { BranchService } from '@/lib/services/branch-service';
 import { OrderService } from '@/lib/services/order-service';
 import { QRService } from '@/lib/services/qr-service';
 import { MenuService } from '@/lib/services/menu-service';
 import { BuffetService } from '@/lib/services/buffet-service';
+import { DeliveryZoneService } from '@/lib/services/delivery-zone-service';
 import { AuthService, AuthenticatedUser } from '@/lib/services/auth-service';
 import { OrderStatusBadge } from '@/components/OrderStatusBadge';
 
@@ -24,10 +25,11 @@ export default function BranchAdminPortal() {
   const [categories, setCategories] = useState<MenuCategory[]>([]);
   const [buffets, setBuffets] = useState<BuffetRegistration[]>([]);
   const [buffetBookings, setBuffetBookings] = useState<BuffetBooking[]>([]);
+  const [deliveryZones, setDeliveryZones] = useState<DeliveryZone[]>([]);
   const [adminUser, setAdminUser] = useState<AuthenticatedUser | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const [activeTab, setActiveTab] = useState<'orders' | 'tables' | 'menu' | 'buffet'>('orders');
+  const [activeTab, setActiveTab] = useState<'orders' | 'tables' | 'menu' | 'delivery' | 'buffet'>('orders');
   
   // New Table modal state
   const [newTableNumber, setNewTableNumber] = useState('');
@@ -38,8 +40,20 @@ export default function BranchAdminPortal() {
   const [itemName, setItemName] = useState('');
   const [itemDesc, setItemDesc] = useState('');
   const [itemPrice, setItemPrice] = useState(0);
+  const [itemPrepTime, setItemPrepTime] = useState(15);
+  const [itemIsAvailable, setItemIsAvailable] = useState(true);
+  const [itemIsVisible, setItemIsVisible] = useState(true);
   const [itemCategoryId, setItemCategoryId] = useState('');
   const [itemImageUrl, setItemImageUrl] = useState('https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=600&auto=format&fit=crop&q=80');
+
+  // Delivery Zone Editor State
+  const [editingZone, setEditingZone] = useState<DeliveryZone | null>(null);
+  const [zoneName, setZoneName] = useState('');
+  const [zoneDeliveryFee, setZoneDeliveryFee] = useState(100);
+  const [zoneMinOrder, setZoneMinOrder] = useState(400);
+  const [zoneEstimatedMinutes, setZoneEstimatedMinutes] = useState(35);
+  const [zoneIsActive, setZoneIsActive] = useState(true);
+  const [zoneMessage, setZoneMessage] = useState<string | null>(null);
 
   // File input ref for camera & gallery photo upload
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -116,20 +130,22 @@ export default function BranchAdminPortal() {
 
   async function loadBranchData(branchId: string) {
     const oList = await OrderService.getOrders(branchId === 'all' ? undefined : { branchId });
-    const targetBranch = branchId === 'all' ? 'b1000000-0000-0000-0000-000000000001' : branchId;
+    const targetBranch = branchId === 'all' ? (adminUser?.branch_id || 'b1000000-0000-0000-0000-000000000001') : branchId;
     const tList = await QRService.getTablesByBranch(targetBranch);
-    const mList = await MenuService.getMenuItems();
+    const mList = await MenuService.getMenuItems({ branchId: targetBranch });
     const cList = await MenuService.getCategories();
     const bList = await BuffetService.getActiveBuffets(targetBranch);
     if (bList.length > 0) {
       const bkList = await BuffetService.getBookingsForBuffet(bList[0].id);
       setBuffetBookings(bkList);
     }
+    const zList = await DeliveryZoneService.getDeliveryZones(targetBranch, false).catch(() => []);
     setOrders([...oList]);
     setTables([...tList]);
     setMenuItems([...mList]);
     setCategories([...cList]);
     setBuffets([...bList]);
+    setDeliveryZones([...zList]);
   }
 
   const handleUpdateStatus = async (orderId: string, nextStatus: OrderStatus) => {
@@ -221,27 +237,45 @@ export default function BranchAdminPortal() {
     if (!itemName || !itemPrice || !itemCategoryId) return;
     setMenuSaveMessage(null);
 
+    const targetBranch = selectedBranchId === 'all' ? (adminUser?.branch_id || 'b1000000-0000-0000-0000-000000000001') : selectedBranchId;
+
     try {
       if (editingItem) {
-        await MenuService.updateMenuItem(editingItem.id, {
-          name: itemName,
-          description: itemDesc,
-          base_price: itemPrice,
-          category_id: itemCategoryId,
-          image_url: itemImageUrl,
-        });
-        setMenuSaveMessage(`Menu item "${itemName}" updated successfully!`);
+        if (adminUser?.role === 'OWNER') {
+          await MenuService.updateMenuItem(editingItem.id, {
+            name: itemName,
+            description: itemDesc,
+            base_price: itemPrice,
+            category_id: itemCategoryId,
+            image_url: itemImageUrl,
+            price: itemPrice,
+            preparation_time: itemPrepTime,
+            is_available: itemIsAvailable,
+            is_visible: itemIsVisible,
+          }, targetBranch);
+        } else {
+          // Branch admin updates branch operational settings
+          await MenuService.updateBranchMenuItem(targetBranch, editingItem.id, {
+            price: itemPrice,
+            preparation_time: itemPrepTime,
+            is_available: itemIsAvailable,
+            is_visible: itemIsVisible,
+          });
+        }
+        setMenuSaveMessage(`Menu item "${itemName}" updated successfully for branch!`);
       } else {
         await MenuService.addMenuItem({
           category_id: itemCategoryId,
           name: itemName,
           description: itemDesc,
           base_price: itemPrice,
+          price: itemPrice,
           has_variants: false,
           image_url: itemImageUrl,
-          is_available: true,
+          is_available: itemIsAvailable,
+          preparation_time: itemPrepTime,
           sort_order: menuItems.length + 1,
-        });
+        }, targetBranch);
         setMenuSaveMessage(`New menu item "${itemName}" added successfully!`);
       }
 
@@ -249,6 +283,9 @@ export default function BranchAdminPortal() {
       setItemName('');
       setItemDesc('');
       setItemPrice(0);
+      setItemPrepTime(15);
+      setItemIsAvailable(true);
+      setItemIsVisible(true);
       await loadBranchData(selectedBranchId);
     } catch (err: any) {
       setMenuSaveMessage(`Failed to save menu item: ${err.message}`);
@@ -279,13 +316,67 @@ export default function BranchAdminPortal() {
   const handleCheckInBuffetToken = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!verifyTokenInput) return;
+    if (!adminUser) {
+      setScanMessage('Error: You must be logged in as staff to check in tickets.');
+      return;
+    }
 
-    const ok = await BuffetService.checkInBooking(verifyTokenInput);
-    if (ok) {
-      setScanMessage(`Ticket Verified! Customer Checked In.`);
+    const targetBranch = selectedBranchId === 'all'
+      ? (adminUser.branch_id || 'b1000000-0000-0000-0000-000000000001')
+      : selectedBranchId;
+
+    const result = await BuffetService.checkInBooking(verifyTokenInput, adminUser.id, targetBranch);
+    if (result.success) {
+      setScanMessage(`✅ Verified! Customer "${result.customer_name}" (${result.guests_count} Guests) Checked In.`);
+      setVerifyTokenInput('');
       loadBranchData(selectedBranchId);
     } else {
-      setScanMessage(`Invalid or non-existent ticket token.`);
+      setScanMessage(`❌ Check-in Failed: ${result.error || 'Invalid or non-existent ticket token.'}`);
+    }
+  };
+
+  const handleSaveDeliveryZone = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!zoneName) return;
+
+    const targetBranch = selectedBranchId === 'all'
+      ? (adminUser?.branch_id || 'b1000000-0000-0000-0000-000000000001')
+      : selectedBranchId;
+
+    try {
+      await DeliveryZoneService.saveDeliveryZone({
+        id: editingZone?.id,
+        branch_id: targetBranch,
+        name: zoneName,
+        delivery_fee: zoneDeliveryFee,
+        minimum_order_amount: zoneMinOrder,
+        estimated_delivery_minutes: zoneEstimatedMinutes,
+        is_active: zoneIsActive,
+      });
+
+      setZoneMessage(`Delivery zone "${zoneName}" saved successfully!`);
+      setTimeout(() => setZoneMessage(null), 3000);
+      setEditingZone(null);
+      setZoneName('');
+      setZoneDeliveryFee(100);
+      setZoneMinOrder(400);
+      setZoneEstimatedMinutes(35);
+      setZoneIsActive(true);
+      await loadBranchData(selectedBranchId);
+    } catch (err: any) {
+      setZoneMessage(`Failed to save delivery zone: ${err.message}`);
+    }
+  };
+
+  const handleDeleteDeliveryZone = async (zoneId: string, name: string) => {
+    if (!confirm(`Are you sure you want to delete delivery zone "${name}"?`)) return;
+    try {
+      await DeliveryZoneService.deleteDeliveryZone(zoneId);
+      setZoneMessage(`Delivery zone "${name}" deleted.`);
+      setTimeout(() => setZoneMessage(null), 3000);
+      await loadBranchData(selectedBranchId);
+    } catch (err: any) {
+      setZoneMessage(`Failed to delete: ${err.message}`);
     }
   };
 
@@ -404,6 +495,16 @@ export default function BranchAdminPortal() {
             }`}
           >
             Menu Product Manager ({menuItems.length})
+          </button>
+          <button
+            onClick={() => setActiveTab('delivery')}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+              activeTab === 'delivery'
+                ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
+                : 'bg-slate-900 text-slate-400 hover:text-white'
+            }`}
+          >
+            Delivery Zones ({deliveryZones.length})
           </button>
           <button
             onClick={() => setActiveTab('buffet')}
@@ -773,15 +874,49 @@ export default function BranchAdminPortal() {
                   </select>
                 </div>
 
-                <div className="space-y-1">
-                  <label className="font-semibold text-slate-400">Price (Rs.)</label>
-                  <input
-                    type="number"
-                    value={itemPrice}
-                    onChange={(e) => setItemPrice(parseFloat(e.target.value) || 0)}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-white focus:border-amber-500 focus:outline-none"
-                    required
-                  />
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="font-semibold text-slate-400">Branch Price (Rs.)</label>
+                    <input
+                      type="number"
+                      value={itemPrice}
+                      onChange={(e) => setItemPrice(parseFloat(e.target.value) || 0)}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-white focus:border-amber-500 focus:outline-none"
+                      required
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="font-semibold text-slate-400">Prep Time (Mins)</label>
+                    <input
+                      type="number"
+                      value={itemPrepTime}
+                      onChange={(e) => setItemPrepTime(parseInt(e.target.value) || 15)}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-white focus:border-amber-500 focus:outline-none"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-6 py-1">
+                  <label className="flex items-center gap-2 cursor-pointer text-slate-300 font-semibold text-xs">
+                    <input
+                      type="checkbox"
+                      checked={itemIsAvailable}
+                      onChange={(e) => setItemIsAvailable(e.target.checked)}
+                      className="w-4 h-4 rounded text-amber-500 focus:ring-0 bg-slate-950 border-slate-800"
+                    />
+                    <span>Available / In Stock</span>
+                  </label>
+
+                  <label className="flex items-center gap-2 cursor-pointer text-slate-300 font-semibold text-xs">
+                    <input
+                      type="checkbox"
+                      checked={itemIsVisible}
+                      onChange={(e) => setItemIsVisible(e.target.checked)}
+                      className="w-4 h-4 rounded text-amber-500 focus:ring-0 bg-slate-950 border-slate-800"
+                    />
+                    <span>Visible in Menu</span>
+                  </label>
                 </div>
 
                 <div className="space-y-1">
@@ -849,6 +984,9 @@ export default function BranchAdminPortal() {
                         setItemName('');
                         setItemDesc('');
                         setItemPrice(0);
+                        setItemPrepTime(15);
+                        setItemIsAvailable(true);
+                        setItemIsVisible(true);
                       }}
                       className="flex-1 py-3 bg-slate-800 text-slate-300 font-bold rounded-xl"
                     >
@@ -867,39 +1005,77 @@ export default function BranchAdminPortal() {
 
             {/* Menu List */}
             <div className="lg:col-span-7 bg-slate-900 border border-slate-800 rounded-3xl p-6 space-y-4">
-              <h3 className="text-base font-black text-white border-b border-slate-800 pb-3">Menu Product Catalog</h3>
+              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                <h3 className="text-base font-black text-white">Branch Menu Catalog ({menuItems.length})</h3>
+                <span className="text-xs text-slate-400">Targeting Selected Branch</span>
+              </div>
               <div className="space-y-3 max-h-[600px] overflow-y-auto pr-1">
                 {menuItems.map((item) => (
-                  <div key={item.id} className="p-4 rounded-2xl bg-slate-950 border border-slate-800/80 flex items-center justify-between">
-                    <div>
-                      <h4 className="font-bold text-xs text-white">{item.name}</h4>
-                      <span className="text-xs font-black text-amber-400">Rs. {item.base_price}</span>
+                  <div key={item.id} className="p-4 rounded-2xl bg-slate-950 border border-slate-800/80 flex items-center justify-between gap-3">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <h4 className="font-bold text-xs text-white">{item.name}</h4>
+                        {item.preparation_time && (
+                          <span className="text-[10px] text-slate-400 bg-slate-900 px-1.5 py-0.5 rounded border border-slate-800">
+                            ~{item.preparation_time}m prep
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 mt-1">
+                        <span className="text-xs font-black text-amber-400">Rs. {item.price ?? item.base_price}</span>
+                        {item.price !== undefined && item.price !== item.base_price && (
+                          <span className="text-[10px] text-slate-500 line-through">Base: Rs. {item.base_price}</span>
+                        )}
+                      </div>
                       {item.description && <p className="text-[11px] text-slate-500 mt-0.5 line-clamp-1">{item.description}</p>}
                     </div>
 
                     <div className="flex items-center gap-2">
                       <button
+                        onClick={async () => {
+                          const targetBranch = selectedBranchId === 'all' ? (adminUser?.branch_id || 'b1000000-0000-0000-0000-000000000001') : selectedBranchId;
+                          await MenuService.toggleBranchItemAvailability(targetBranch, item.id);
+                          loadBranchData(selectedBranchId);
+                        }}
+                        className={`px-2.5 py-1.5 rounded-xl text-[10px] font-black uppercase transition-all ${
+                          item.is_available
+                            ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/20'
+                            : 'bg-rose-500/10 text-rose-400 border border-rose-500/30 hover:bg-rose-500/20'
+                        }`}
+                      >
+                        {item.is_available ? 'In Stock' : '86 / Sold Out'}
+                      </button>
+
+                      <button
                         onClick={() => {
                           setEditingItem(item);
                           setItemName(item.name);
                           setItemDesc(item.description || '');
-                          setItemPrice(item.base_price);
+                          setItemPrice(item.price ?? item.base_price);
+                          setItemPrepTime(item.preparation_time || 15);
+                          setItemIsAvailable(item.is_available);
+                          setItemIsVisible(item.is_visible !== false);
                           setItemCategoryId(item.category_id);
                           setItemImageUrl(item.image_url || '');
                         }}
                         className="p-2 rounded-lg bg-slate-800 hover:bg-amber-500 text-amber-400 hover:text-slate-950 transition-colors"
+                        title="Edit Item"
                       >
                         <Edit3 className="w-4 h-4" />
                       </button>
-                      <button
-                        onClick={async () => {
-                          await MenuService.deleteMenuItem(item.id);
-                          loadBranchData(selectedBranchId);
-                        }}
-                        className="p-2 rounded-lg bg-slate-800 hover:bg-rose-500 text-rose-400 hover:text-white transition-colors"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+
+                      {(adminUser?.role === 'OWNER') && (
+                        <button
+                          onClick={async () => {
+                            await MenuService.deleteMenuItem(item.id);
+                            loadBranchData(selectedBranchId);
+                          }}
+                          className="p-2 rounded-lg bg-slate-800 hover:bg-rose-500 text-rose-400 hover:text-white transition-colors"
+                          title="Delete from Catalog"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -909,7 +1085,196 @@ export default function BranchAdminPortal() {
           </div>
         )}
 
-        {/* TAB 4: Open Buffet Manager & Ticket QR Verifier */}
+        {/* TAB: Delivery Zones Management */}
+        {activeTab === 'delivery' && (
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            
+            {/* Zone Creation / Editor Form */}
+            <div className="lg:col-span-5 bg-slate-900 border border-slate-800 rounded-3xl p-6 space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                <h3 className="text-base font-black text-white flex items-center gap-2">
+                  <Bike className="w-5 h-5 text-amber-400" />
+                  {editingZone ? 'Edit Delivery Zone' : 'Add New Delivery Zone'}
+                </h3>
+                {editingZone && (
+                  <button
+                    onClick={() => {
+                      setEditingZone(null);
+                      setZoneName('');
+                      setZoneDeliveryFee(100);
+                      setZoneMinOrder(400);
+                      setZoneEstimatedMinutes(35);
+                      setZoneIsActive(true);
+                    }}
+                    className="text-xs text-slate-400 hover:text-white font-bold"
+                  >
+                    Cancel
+                  </button>
+                )}
+              </div>
+
+              {zoneMessage && (
+                <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs font-bold flex items-center gap-2">
+                  <Check className="w-4 h-4 shrink-0" />
+                  <span>{zoneMessage}</span>
+                </div>
+              )}
+
+              <form onSubmit={handleSaveDeliveryZone} className="space-y-4 text-xs">
+                <div className="space-y-1">
+                  <label className="font-semibold text-slate-400">Zone / Area Name</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Model Town / Sector 4"
+                    value={zoneName}
+                    onChange={(e) => setZoneName(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-white focus:border-amber-500 focus:outline-none"
+                    required
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="font-semibold text-slate-400">Delivery Fee (Rs.)</label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={zoneDeliveryFee}
+                      onChange={(e) => setZoneDeliveryFee(parseFloat(e.target.value) || 0)}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-white focus:border-amber-500 focus:outline-none"
+                      required
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="font-semibold text-slate-400">Min. Order (Rs.)</label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={zoneMinOrder}
+                      onChange={(e) => setZoneMinOrder(parseFloat(e.target.value) || 0)}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-white focus:border-amber-500 focus:outline-none"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="font-semibold text-slate-400">Est. Delivery (Mins)</label>
+                    <input
+                      type="number"
+                      min={5}
+                      max={180}
+                      value={zoneEstimatedMinutes}
+                      onChange={(e) => setZoneEstimatedMinutes(parseInt(e.target.value) || 35)}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-white focus:border-amber-500 focus:outline-none"
+                      required
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="font-semibold text-slate-400">Status</label>
+                    <button
+                      type="button"
+                      onClick={() => setZoneIsActive(!zoneIsActive)}
+                      className={`w-full py-2.5 rounded-xl font-bold transition-all border ${
+                        zoneIsActive
+                          ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                          : 'bg-rose-500/10 border-rose-500/30 text-rose-400'
+                      }`}
+                    >
+                      {zoneIsActive ? 'Active Zone' : 'Disabled'}
+                    </button>
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  className="w-full py-3 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black rounded-xl uppercase tracking-wider shadow-lg shadow-amber-500/20 active:scale-95 transition-all"
+                >
+                  {editingZone ? 'Update Delivery Zone' : 'Save Delivery Zone'}
+                </button>
+              </form>
+            </div>
+
+            {/* Configured Delivery Zones Table */}
+            <div className="lg:col-span-7 bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden shadow-2xl">
+              <div className="p-4 border-b border-slate-800 flex items-center justify-between">
+                <h3 className="font-bold text-sm text-white flex items-center gap-2">
+                  <MapPin className="w-4 h-4 text-amber-400" />
+                  Active Branch Delivery Zones ({deliveryZones.length})
+                </h3>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs text-slate-300">
+                  <thead className="bg-slate-950 text-slate-400 uppercase text-[10px] font-bold">
+                    <tr>
+                      <th className="p-4">Zone Name</th>
+                      <th className="p-4">Delivery Fee</th>
+                      <th className="p-4">Min. Order</th>
+                      <th className="p-4">ETA</th>
+                      <th className="p-4">Status</th>
+                      <th className="p-4 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800">
+                    {deliveryZones.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="p-8 text-center text-slate-500">
+                          No delivery zones configured for this branch yet.
+                        </td>
+                      </tr>
+                    ) : (
+                      deliveryZones.map((z) => (
+                        <tr key={z.id} className="hover:bg-slate-800/40 transition-colors">
+                          <td className="p-4 font-bold text-white">{z.name}</td>
+                          <td className="p-4 font-black text-amber-400">Rs. {z.delivery_fee}</td>
+                          <td className="p-4 font-semibold text-slate-300">Rs. {z.minimum_order_amount}</td>
+                          <td className="p-4 text-slate-400">~{z.estimated_delivery_minutes} mins</td>
+                          <td className="p-4">
+                            <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase ${
+                              z.is_active
+                                ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                                : 'bg-rose-500/20 text-rose-400 border border-rose-500/30'
+                            }`}>
+                              {z.is_active ? 'Active' : 'Disabled'}
+                            </span>
+                          </td>
+                          <td className="p-4 text-right space-x-2">
+                            <button
+                              onClick={() => {
+                                setEditingZone(z);
+                                setZoneName(z.name);
+                                setZoneDeliveryFee(z.delivery_fee);
+                                setZoneMinOrder(z.minimum_order_amount);
+                                setZoneEstimatedMinutes(z.estimated_delivery_minutes);
+                                setZoneIsActive(z.is_active);
+                              }}
+                              className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-amber-400"
+                              title="Edit Zone"
+                            >
+                              <Edit3 className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteDeliveryZone(z.id, z.name)}
+                              className="p-1.5 rounded-lg bg-slate-800 hover:bg-rose-950 text-rose-400"
+                              title="Delete Zone"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+          </div>
+        )}
+
+        {/* TAB 5: Open Buffet Manager & Ticket QR Verifier */}
         {activeTab === 'buffet' && (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
             

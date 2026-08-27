@@ -1,8 +1,10 @@
 import { PaymentMethod, PaymentStatus } from '../types';
+import { supabase } from '../supabase/client';
 
 export interface PaymentProcessResult {
   success: boolean;
-  transactionId: string;
+  transactionId?: string;
+  checkoutUrl?: string;
   paymentStatus: PaymentStatus;
   message: string;
   gateway?: string;
@@ -10,71 +12,87 @@ export interface PaymentProcessResult {
 
 export class PaymentService {
   /**
-   * Process payment for an order with Pakistani and International online gateway integration.
-   * Supports JazzCash, EasyPaisa, Debit/Credit Card (Visa/Mastercard), Direct Bank Transfer, and Cash on Delivery.
+   * Authoritative Payment Initiation.
+   * CASH orders are placed directly with paymentStatus = PENDING (settled at counter or delivery).
+   * Online orders (SAFEPAY, CARD, JAZZCASH, EASYPAISA, ONLINE) initiate an authenticated checkout session via the backend gateway.
    */
   static async processPayment(
     amount: number,
     method: PaymentMethod,
-    customerDetails: { name: string; phone: string; accountMobile?: string }
+    customerDetails: { name: string; phone: string; email?: string; orderId?: string; bookingId?: string }
   ): Promise<PaymentProcessResult> {
-    const transactionId = `TXN-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;
-
     if (method === 'CASH') {
       return {
         success: true,
-        transactionId,
         paymentStatus: 'PENDING',
-        message: 'Order placed with Cash Payment on delivery or counter.',
-        gateway: 'Cash Ledger',
+        message: 'Order placed with Cash Payment. Amount will be collected upon counter pickup or doorstep delivery.',
+        gateway: 'Cash on Delivery / Counter Ledger',
       };
     }
 
-    if (method === 'JAZZCASH') {
+    // For online payments, request checkout session from backend API
+    try {
+      const response = await fetch('/api/payments/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          orderId: customerDetails.orderId,
+          bookingId: customerDetails.bookingId,
+          method,
+          customer: {
+            name: customerDetails.name,
+            phone: customerDetails.phone,
+            email: customerDetails.email,
+          },
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'Failed to initiate payment gateway session.');
+      }
+
       return {
         success: true,
-        transactionId: `JC-${Date.now()}`,
-        paymentStatus: 'PAID',
-        message: `JazzCash Online Payment of Rs. ${amount} processed successfully for ${customerDetails.phone}.`,
-        gateway: 'JazzCash Wallet API',
+        transactionId: data.transactionId,
+        checkoutUrl: data.checkoutUrl,
+        paymentStatus: 'INITIATED',
+        message: 'Redirecting to Safepay secure checkout portal...',
+        gateway: data.provider || 'Safepay',
       };
+    } catch (err: any) {
+      return {
+        success: false,
+        paymentStatus: 'FAILED',
+        message: err.message || 'Payment gateway initialization failed.',
+      };
+    }
+  }
+
+  /**
+   * Fetch payment transaction history and live status from the database.
+   */
+  static async getPaymentStatus(orderId: string): Promise<{ payment_status: PaymentStatus; transactions: any[] }> {
+    if (!supabase) {
+      return { payment_status: 'PENDING', transactions: [] };
     }
 
-    if (method === 'EASYPAISA') {
-      return {
-        success: true,
-        transactionId: `EP-${Date.now()}`,
-        paymentStatus: 'PAID',
-        message: `EasyPaisa Direct Payment of Rs. ${amount} processed successfully for ${customerDetails.phone}.`,
-        gateway: 'EasyPaisa Wallet API',
-      };
-    }
+    const { data: order } = await supabase
+      .from('orders')
+      .select('payment_status')
+      .eq('id', orderId)
+      .maybeSingle();
 
-    if (method === 'CARD') {
-      return {
-        success: true,
-        transactionId: `CARD-${Date.now()}`,
-        paymentStatus: 'PAID',
-        message: `Credit/Debit Card payment of Rs. ${amount} authorized successfully.`,
-        gateway: 'Visa/MasterCard Gateway',
-      };
-    }
-
-    if (method === 'ONLINE' || method === 'TEST_PAYMENT') {
-      return {
-        success: true,
-        transactionId,
-        paymentStatus: 'PAID',
-        message: `Online bank transfer / portal payment of Rs. ${amount} received successfully.`,
-        gateway: 'Direct Online Portal',
-      };
-    }
+    const { data: transactions } = await supabase
+      .from('payment_transactions')
+      .select('*')
+      .eq('order_id', orderId)
+      .order('created_at', { ascending: false });
 
     return {
-      success: false,
-      transactionId: '',
-      paymentStatus: 'FAILED',
-      message: 'Unsupported payment method.',
+      payment_status: order?.payment_status || 'PENDING',
+      transactions: transactions || [],
     };
   }
 }

@@ -4,7 +4,7 @@ import React, { useEffect, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import QRCode from 'qrcode';
-import { Utensils, Calendar, Clock, Users, QrCode, CheckCircle, ArrowLeft, Printer, Sparkles } from 'lucide-react';
+import { Utensils, Calendar, Clock, Users, QrCode, CheckCircle, ArrowLeft, Printer, Sparkles, CreditCard } from 'lucide-react';
 import { BuffetRegistration, BuffetBooking } from '@/lib/types';
 import { BuffetService } from '@/lib/services/buffet-service';
 
@@ -81,8 +81,36 @@ export default function OpenBuffetPage() {
 
             <div className="p-3 bg-slate-950 rounded-2xl border border-slate-800 text-xs text-slate-300 space-y-1">
               <p><strong className="text-white">Ticket Token:</strong> <span className="font-mono text-amber-400">{bookingTicket.qr_ticket_token}</span></p>
-              <p><strong className="text-white">Total Paid/Due:</strong> Rs. {bookingTicket.total_amount}</p>
+              <p><strong className="text-white">Status:</strong> <span className={bookingTicket.status === 'CONFIRMED' ? 'text-emerald-400 font-bold' : 'text-amber-400 font-bold'}>{bookingTicket.status}</span></p>
+              <p><strong className="text-white">Total Amount:</strong> Rs. {bookingTicket.total_amount}</p>
             </div>
+
+            {bookingTicket.status === 'PENDING' && (
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    const res = await fetch('/api/payments/checkout', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        bookingId: bookingTicket.id,
+                        customer: { name: bookingTicket.customer_name, phone: bookingTicket.customer_phone },
+                      }),
+                    });
+                    const data = await res.json();
+                    if (data.checkoutUrl) {
+                      window.location.href = data.checkoutUrl;
+                    }
+                  } catch (err) {
+                    console.error('Payment redirect failed', err);
+                  }
+                }}
+                className="w-full py-3 bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-slate-950 font-black rounded-xl text-xs uppercase tracking-wider shadow-lg shadow-emerald-500/20 active:scale-95 transition-all flex items-center justify-center gap-2"
+              >
+                <CreditCard className="w-4 h-4" /> Pay Rs. {bookingTicket.total_amount} with Safepay
+              </button>
+            )}
 
             <div className="flex gap-3">
               <button

@@ -3,9 +3,9 @@ import { supabase } from '../supabase/client';
 
 export class QRService {
   static generateSecureToken(branchSlug: string, tableNumber: string): string {
-    const randomHex = Array.from({ length: 8 }, () =>
-      Math.floor(Math.random() * 16).toString(16)
-    ).join('');
+    const randomHex = typeof crypto !== 'undefined' && crypto.getRandomValues
+      ? Array.from(crypto.getRandomValues(new Uint8Array(8)), (b) => b.toString(16).padStart(2, '0')).join('')
+      : Math.random().toString(16).substring(2, 18);
     const sanitizedTable = tableNumber.toLowerCase().replace(/[^a-z0-9]/g, '');
     return `qr_${branchSlug.substring(0, 4)}_${sanitizedTable}_${randomHex}`;
   }

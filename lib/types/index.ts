@@ -15,8 +15,35 @@ export type OrderStatus =
   | 'COMPLETED'
   | 'CANCELLED';
 
-export type PaymentMethod = 'CASH' | 'JAZZCASH' | 'EASYPAISA' | 'CARD' | 'ONLINE' | 'TEST_PAYMENT';
-export type PaymentStatus = 'PENDING' | 'PAID' | 'FAILED';
+export type PaymentMethod = 'CASH' | 'SAFEPAY' | 'JAZZCASH' | 'EASYPAISA' | 'CARD' | 'ONLINE' | 'TEST_PAYMENT';
+export type PaymentStatus =
+  | 'PENDING'
+  | 'INITIATED'
+  | 'AUTHORIZED'
+  | 'PAID'
+  | 'FAILED'
+  | 'CANCELLED'
+  | 'REFUNDED'
+  | 'PARTIALLY_REFUNDED';
+
+export interface PaymentTransaction {
+  id: string;
+  order_id?: string;
+  buffet_booking_id?: string;
+  provider: string;
+  provider_transaction_id?: string;
+  amount: number;
+  currency: string;
+  status: PaymentStatus;
+  payment_method: string;
+  checkout_url?: string;
+  provider_reference?: string;
+  failure_reason?: string;
+  raw_response?: any;
+  created_at: string;
+  updated_at: string;
+  paid_at?: string;
+}
 
 export interface Profile {
   id: string;
@@ -60,6 +87,7 @@ export interface MenuItemVariant {
   menu_item_id: string;
   name: string;
   price: number;
+  is_available?: boolean;
   sort_order: number;
 }
 
@@ -70,11 +98,39 @@ export interface MenuItem {
   name: string;
   description?: string;
   base_price: number;
+  price?: number; // active branch-specific price (defaults to base_price)
   has_variants: boolean;
   image_url?: string;
-  is_available: boolean;
+  is_available: boolean; // active branch availability
+  is_visible?: boolean;
+  preparation_time?: number; // in minutes
   sort_order: number;
+  branch_id?: string;
   variants?: MenuItemVariant[];
+}
+
+export interface BranchMenuItem {
+  id: string;
+  branch_id: string;
+  menu_item_id: string;
+  price: number;
+  is_available: boolean;
+  is_visible: boolean;
+  preparation_time: number;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+  menu_item?: MenuItem;
+}
+
+export interface BranchMenuItemVariant {
+  id: string;
+  branch_id: string;
+  variant_id: string;
+  price: number;
+  is_available: boolean;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface RestaurantTable {
@@ -115,6 +171,19 @@ export interface OrderStatusHistory {
   created_at: string;
 }
 
+export interface DeliveryZone {
+  id: string;
+  branch_id: string;
+  name: string;
+  delivery_fee: number;
+  minimum_order_amount: number;
+  estimated_delivery_minutes: number;
+  is_active: boolean;
+  sort_order: number;
+  radius_km?: number;
+  is_delivery_enabled?: boolean;
+}
+
 export interface Order {
   id: string;
   order_number: string;
@@ -125,6 +194,7 @@ export interface Order {
   customer_phone: string;
   order_type: OrderType;
   table_id?: string;
+  delivery_zone_id?: string;
   delivery_address?: string;
   delivery_notes?: string;
   subtotal: number;
@@ -137,6 +207,7 @@ export interface Order {
   updated_at: string;
   branch?: Branch;
   table?: RestaurantTable;
+  delivery_zone?: DeliveryZone;
   items?: OrderItem[];
   history?: OrderStatusHistory[];
   rider_assignment?: {
@@ -170,8 +241,30 @@ export interface BuffetBooking {
   guests_count: number;
   total_amount: number;
   qr_ticket_token: string;
-  status: 'CONFIRMED' | 'CHECKED_IN' | 'CANCELLED';
+  status: 'PENDING' | 'CONFIRMED' | 'CHECKED_IN' | 'CANCELLED';
   created_at: string;
+  buffet_registration?: BuffetRegistration;
+}
+
+export interface BuffetCheckinLog {
+  id: string;
+  booking_id: string;
+  buffet_id: string;
+  branch_id: string;
+  checked_in_by_user_id?: string;
+  guests_count: number;
+  notes?: string;
+  checked_in_at: string;
+}
+
+export interface BuffetCheckInResult {
+  success: boolean;
+  booking_id?: string;
+  customer_name?: string;
+  guests_count?: number;
+  buffet_title?: string;
+  checked_in_at?: string;
+  error?: string;
 }
 
 export interface SalesReport {
