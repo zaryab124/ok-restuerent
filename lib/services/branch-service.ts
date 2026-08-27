@@ -163,7 +163,6 @@ export class BranchService {
       }
     } catch {}
 
-    // Default to true for existing active branches if capability table/row is not configured yet
     return true;
   }
 }
