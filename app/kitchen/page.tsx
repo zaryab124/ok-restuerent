@@ -119,12 +119,20 @@ export default function KitchenDisplaySystem() {
     try {
       const userId = chefInfo?.id || '30000000-0000-0000-0000-000000000001';
       await OrderService.updateOrderStatus(orderId, nextStatus, userId, `Kitchen marked ${nextStatus}`);
-      await loadKitchenOrders(selectedBranchId);
+      setTimeout(() => {
+        loadKitchenOrders(selectedBranchId);
+      }, 500);
     } catch (err: any) {
       console.error('Kitchen status update error:', err);
       setErrorMessage(`Status update failed: ${err.message}`);
-      await loadKitchenOrders(selectedBranchId);
     }
+  };
+
+  const handleKitchenStart = async (o: Order) => {
+    if (o.status === 'PENDING') {
+      await handleUpdateStatus(o.id, 'CONFIRMED');
+    }
+    await handleUpdateStatus(o.id, 'PREPARING');
   };
 
   const handleLogout = async () => {
@@ -263,10 +271,10 @@ export default function KitchenDisplaySystem() {
                 </div>
 
                 <button
-                  onClick={() => handleUpdateStatus(o.id, 'PREPARING')}
-                  className="w-full py-3 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 font-black rounded-xl text-xs uppercase tracking-wider transition-all"
+                  onClick={() => handleKitchenStart(o)}
+                  className="w-full py-3 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 font-black rounded-xl text-xs uppercase tracking-wider transition-all cursor-pointer shadow-lg active:scale-95"
                 >
-                  Start Preparing
+                  {o.status === 'PENDING' ? 'Accept & Start Cooking 🍳' : 'Start Preparing 🍳'}
                 </button>
               </div>
             ))}

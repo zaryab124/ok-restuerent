@@ -112,10 +112,11 @@ export default function RiderPortal() {
     try {
       await OrderService.updateOrderStatus(orderId, nextStatus, riderId, `Rider updated status to ${nextStatus}`);
       setMessage(`Delivery status updated to ${nextStatus.replace(/_/g, ' ')}!`);
+      setTimeout(() => {
+        if (riderInfo) loadRiderData(riderInfo);
+      }, 500);
     } catch (err: any) {
       setMessage(`Status update failed: ${err.message}`);
-    } finally {
-      if (riderInfo) await loadRiderData(riderInfo);
     }
   };
 

@@ -196,10 +196,11 @@ export default function BranchAdminPortal() {
     try {
       const userId = adminUser?.id || '20000000-0000-0000-0000-000000000002';
       await OrderService.updateOrderStatus(orderId, nextStatus, userId, `Branch admin marked ${nextStatus}`);
-      await loadBranchData(selectedBranchId);
+      setTimeout(() => {
+        loadBranchData(selectedBranchId);
+      }, 500);
     } catch (err: any) {
       console.error('Admin status update error:', err);
-      await loadBranchData(selectedBranchId);
     }
   };
 
@@ -720,15 +721,15 @@ export default function BranchAdminPortal() {
                             <>
                               {o.order_type === 'DELIVERY' ? (
                                 <>
-                                  <span className="text-[11px] font-bold text-indigo-400 bg-indigo-500/10 px-2.5 py-1 rounded-lg border border-indigo-500/20">
-                                    Ready for Delivery 🛵
+                                  <span className="text-[11px] font-bold text-amber-400 bg-amber-500/10 px-2.5 py-1 rounded-lg border border-amber-500/20">
+                                    Ready for Rider 🛵
                                   </span>
                                   <button
                                     type="button"
-                                    onClick={() => handleUpdateStatus(o.id, 'OUT_FOR_DELIVERY')}
+                                    onClick={() => handleUpdateStatus(o.id, 'ASSIGNED')}
                                     className="px-3 py-1.5 bg-indigo-500 hover:bg-indigo-600 text-white font-bold rounded-lg text-xs shadow-md transition-all active:scale-95 cursor-pointer"
                                   >
-                                    Dispatch 🛵
+                                    Assign to Rider 🛵
                                   </button>
                                 </>
                               ) : (
@@ -742,10 +743,24 @@ export default function BranchAdminPortal() {
                               )}
                             </>
                           )}
-                          {(o.status === 'ASSIGNED' || o.status === 'PICKED_UP') && (
+                          {o.status === 'ASSIGNED' && (
                             <>
                               <span className="text-[11px] font-bold text-amber-400 bg-amber-500/10 px-2.5 py-1 rounded-lg border border-amber-500/20">
                                 Rider Assigned 🛵
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => handleUpdateStatus(o.id, 'PICKED_UP')}
+                                className="px-3 py-1.5 bg-blue-500 hover:bg-blue-600 text-white font-bold rounded-lg text-xs shadow-md transition-all active:scale-95 cursor-pointer"
+                              >
+                                Mark Picked Up 📦
+                              </button>
+                            </>
+                          )}
+                          {o.status === 'PICKED_UP' && (
+                            <>
+                              <span className="text-[11px] font-bold text-blue-400 bg-blue-500/10 px-2.5 py-1 rounded-lg border border-blue-500/20">
+                                Picked Up 📦
                               </span>
                               <button
                                 type="button"
