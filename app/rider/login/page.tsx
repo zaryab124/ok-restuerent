@@ -56,7 +56,7 @@ export default function RiderLoginPage() {
               <label className="text-xs font-semibold text-slate-400">Rider Email</label>
               <input
                 type="email"
-                placeholder="rider@okrestaurant.com"
+                placeholder="rider@example.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-xs text-white focus:border-amber-500 focus:outline-none"
@@ -84,54 +84,6 @@ export default function RiderLoginPage() {
               {loading ? 'Authenticating...' : 'Sign In to Rider Portal'}
             </button>
           </form>
-
-          {/* Quick Demo 1-Click Sign-in */}
-          <div className="pt-4 border-t border-slate-800 space-y-3">
-            <p className="text-[11px] font-bold text-slate-400 text-center uppercase tracking-wider">
-              ⚡ Quick Demo 1-Click Sign-in
-            </p>
-            <div className="grid grid-cols-1 gap-2">
-              <button
-                type="button"
-                onClick={async () => {
-                  setEmail('rider1.dera@okrestaurant.com');
-                  setPassword('okaykarubas12390');
-                  setLoading(true);
-                  try {
-                    await AuthService.login('rider1.dera@okrestaurant.com', 'okaykarubas12390', 'RIDER');
-                    router.push('/rider');
-                  } catch (e: any) {
-                    setError(e.message || 'Login failed');
-                    setLoading(false);
-                  }
-                }}
-                className="w-full py-2.5 px-3 bg-slate-950 hover:bg-slate-800 border border-slate-700/60 rounded-xl text-xs font-bold text-amber-400 text-left flex items-center justify-between transition-all cursor-pointer"
-              >
-                <span>🛵 Bilal Rider (Dera Chungi)</span>
-                <span className="text-[10px] text-slate-400 font-mono">rider1.dera@...</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={async () => {
-                  setEmail('rider1.sherifalon@okrestaurant.com');
-                  setPassword('okaykarubas12390');
-                  setLoading(true);
-                  try {
-                    await AuthService.login('rider1.sherifalon@okrestaurant.com', 'okaykarubas12390', 'RIDER');
-                    router.push('/rider');
-                  } catch (e: any) {
-                    setError(e.message || 'Login failed');
-                    setLoading(false);
-                  }
-                }}
-                className="w-full py-2.5 px-3 bg-slate-950 hover:bg-slate-800 border border-slate-700/60 rounded-xl text-xs font-bold text-amber-400 text-left flex items-center justify-between transition-all cursor-pointer"
-              >
-                <span>🛵 Usman Rider (Main Bypass)</span>
-                <span className="text-[10px] text-slate-400 font-mono">rider1.sherifalon@...</span>
-              </button>
-            </div>
-          </div>
         </div>
       </div>
     </div>
