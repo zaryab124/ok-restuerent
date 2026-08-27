@@ -45,29 +45,36 @@ export default function RiderPortal() {
 
     loadRiderData(riderInfo);
 
-    const unsubscribe = OrderService.subscribe(() => {
+    const interval = setInterval(() => {
       loadRiderData(riderInfo);
-    });
+    }, 3000);
 
-    return () => unsubscribe();
+    return () => {
+      unsubscribe();
+      clearInterval(interval);
+    };
   }, [riderInfo]);
 
   async function loadRiderData(currentRider: AuthenticatedUser) {
-    const filter = currentRider.role === 'OWNER' ? undefined : (currentRider.branch_id ? { branchId: currentRider.branch_id } : undefined);
-    const allBranchOrders = await OrderService.getOrders(filter);
-    
-    // Available ready delivery orders not claimed yet
-    const readyForClaiming = allBranchOrders.filter(
-      (o) => o.status === 'READY' && o.order_type === 'DELIVERY' && !o.rider_assignment
-    );
-    
-    // My claimed/assigned active orders
-    const myOrders = allBranchOrders.filter(
-      (o) => o.rider_assignment?.rider_id === currentRider.id && ['ASSIGNED', 'PICKED_UP', 'OUT_FOR_DELIVERY'].includes(o.status)
-    );
+    try {
+      const filter = currentRider.role === 'OWNER' ? undefined : (currentRider.branch_id ? { branchId: currentRider.branch_id } : undefined);
+      const allBranchOrders = await OrderService.getOrders(filter);
+      
+      // Available ready delivery orders not claimed yet
+      const readyForClaiming = allBranchOrders.filter(
+        (o) => o.status === 'READY' && o.order_type === 'DELIVERY' && !o.rider_assignment
+      );
+      
+      // My claimed/assigned active orders
+      const myOrders = allBranchOrders.filter(
+        (o) => o.rider_assignment?.rider_id === currentRider.id && ['ASSIGNED', 'PICKED_UP', 'OUT_FOR_DELIVERY'].includes(o.status)
+      );
 
-    setAvailableOrders(readyForClaiming);
-    setMyAssignedOrders(myOrders);
+      setAvailableOrders(readyForClaiming);
+      setMyAssignedOrders(myOrders);
+    } catch (e) {
+      console.warn('Rider load error:', e);
+    }
   }
 
   const handleClaimOrder = async (orderId: string) => {

@@ -73,33 +73,41 @@ export default function OwnerExecutivePortal() {
     loadOwnerData();
     MerchantConfigService.getConfig().then(setBankConfig);
 
-    const unsubscribe = OrderService.subscribe(() => {
+    const interval = setInterval(() => {
       loadOwnerData();
-    });
-    return () => unsubscribe();
+    }, 3000);
+
+    return () => {
+      unsubscribe();
+      clearInterval(interval);
+    };
   }, [selectedBranchId, editingMenuBranchId, editingZoneBranchId, ownerInfo]);
 
   async function loadOwnerData() {
-    const bList = await BranchService.getBranches();
-    setBranches(bList);
+    try {
+      const bList = await BranchService.getBranches();
+      setBranches(bList);
 
-    const filter = selectedBranchId !== 'ALL' ? { branchId: selectedBranchId } : undefined;
-    const oList = await OrderService.getOrders(filter);
-    setOrders(oList);
+      const filter = selectedBranchId !== 'ALL' ? { branchId: selectedBranchId } : undefined;
+      const oList = await OrderService.getOrders(filter);
+      setOrders(oList || []);
 
-    const targetMenuBranch = editingMenuBranchId || (bList.length > 0 ? bList[0].id : 'b1000000-0000-0000-0000-000000000001');
-    const mList = await MenuService.getMenuItems({ branchId: targetMenuBranch });
-    setMenuItems(mList);
+      const targetMenuBranch = editingMenuBranchId || (bList.length > 0 ? bList[0].id : 'b1000000-0000-0000-0000-000000000001');
+      const mList = await MenuService.getMenuItems({ branchId: targetMenuBranch });
+      setMenuItems(mList || []);
 
-    const targetZoneBranch = editingZoneBranchId || (bList.length > 0 ? bList[0].id : 'b1000000-0000-0000-0000-000000000001');
-    const zList = await DeliveryZoneService.getDeliveryZones(targetZoneBranch, false).catch(() => []);
-    setDeliveryZones(zList);
+      const targetZoneBranch = editingZoneBranchId || (bList.length > 0 ? bList[0].id : 'b1000000-0000-0000-0000-000000000001');
+      const zList = await DeliveryZoneService.getDeliveryZones(targetZoneBranch, false);
+      setDeliveryZones(zList || []);
 
-    if (supabase) {
-      const { data: dbProfiles } = await supabase.from('profiles').select('*').order('created_at', { ascending: false });
-      if (dbProfiles) {
-        setUsers(dbProfiles);
+      if (supabase) {
+        const { data: dbProfiles } = await supabase.from('profiles').select('*').order('created_at', { ascending: false });
+        if (dbProfiles) {
+          setUsers(dbProfiles);
+        }
       }
+    } catch (e) {
+      console.warn('Owner load error:', e);
     }
   }
 

@@ -125,7 +125,14 @@ export default function BranchAdminPortal() {
       });
     });
 
-    return () => unsubscribe();
+    const interval = setInterval(() => {
+      loadBranchData(selectedBranchId);
+    }, 3000);
+
+    return () => {
+      unsubscribe();
+      clearInterval(interval);
+    };
   }, [selectedBranchId, adminUser]);
 
   async function loadBranchData(branchId: string) {

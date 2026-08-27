@@ -69,18 +69,33 @@ export default function KitchenDisplaySystem() {
       });
     });
 
-    return () => unsubscribe();
+    const interval = setInterval(() => {
+      loadKitchenOrders(selectedBranchId);
+    }, 3000);
+
+    return () => {
+      unsubscribe();
+      clearInterval(interval);
+    };
   }, [selectedBranchId, chefInfo]);
 
   async function loadKitchenOrders(branchId: string) {
-    const list = await OrderService.getOrders(branchId === 'all' ? undefined : { branchId });
-    setOrders(list.filter((o) => ['CONFIRMED', 'PREPARING', 'READY'].includes(o.status)));
+    try {
+      const list = await OrderService.getOrders(branchId === 'all' ? undefined : { branchId });
+      setOrders(list.filter((o) => ['PENDING', 'CONFIRMED', 'PREPARING', 'READY'].includes(o.status)));
+    } catch (e) {
+      console.warn('Kitchen orders load error:', e);
+    }
   }
 
   async function loadKitchenMenu(branchId: string) {
-    const target = branchId === 'all' ? (chefInfo?.branch_id || 'b1000000-0000-0000-0000-000000000001') : branchId;
-    const items = await MenuService.getMenuItems({ branchId: target });
-    setMenuItems(items);
+    try {
+      const target = branchId === 'all' ? (chefInfo?.branch_id || 'b1000000-0000-0000-0000-000000000001') : branchId;
+      const items = await MenuService.getMenuItems({ branchId: target });
+      setMenuItems(items);
+    } catch (e) {
+      console.warn('Kitchen menu load error:', e);
+    }
   }
 
   const handleToggleItemStock = async (menuItemId: string) => {
@@ -117,7 +132,7 @@ export default function KitchenDisplaySystem() {
     router.push('/kitchen/login');
   };
 
-  const confirmedOrders = orders.filter((o) => o.status === 'CONFIRMED');
+  const confirmedOrders = orders.filter((o) => o.status === 'CONFIRMED' || o.status === 'PENDING');
   const preparingOrders = orders.filter((o) => o.status === 'PREPARING');
   const readyOrders = orders.filter((o) => o.status === 'READY');
 
