@@ -124,8 +124,8 @@ export class OrderService {
 
     let data: any = null;
 
-    // 1. Try standard 9-parameter RPC (production stable)
-    const rpc9 = await supabase.rpc('create_order_atomic', {
+    // 1. Try 10-parameter canonical RPC first
+    const rpc10 = await supabase.rpc('create_order_atomic', {
       p_branch_id: branchId,
       p_customer_name: customerName,
       p_customer_phone: customerPhone,
@@ -135,13 +135,14 @@ export class OrderService {
       p_delivery_notes: deliveryNotes || null,
       p_payment_method: paymentMethod,
       p_items: itemsPayload,
+      p_delivery_zone_id: deliveryZoneId || null,
     });
 
-    if (!rpc9.error && rpc9.data) {
-      data = rpc9.data;
+    if (!rpc10.error && rpc10.data) {
+      data = rpc10.data;
     } else {
-      // 2. Try 10-parameter RPC (if delivery zone parameter is supported)
-      const rpc10 = await supabase.rpc('create_order_atomic', {
+      // 2. Fallback to 9-parameter RPC
+      const rpc9 = await supabase.rpc('create_order_atomic', {
         p_branch_id: branchId,
         p_customer_name: customerName,
         p_customer_phone: customerPhone,
@@ -151,72 +152,13 @@ export class OrderService {
         p_delivery_notes: deliveryNotes || null,
         p_payment_method: paymentMethod,
         p_items: itemsPayload,
-        p_delivery_zone_id: deliveryZoneId || null,
       });
 
-      if (!rpc10.error && rpc10.data) {
-        data = rpc10.data;
+      if (!rpc9.error && rpc9.data) {
+        data = rpc9.data;
       } else {
-        // 3. Ultra-resilient direct table insert fallback
-        console.warn('RPC create_order_atomic failed, attempting direct table insert:', rpc9.error?.message, rpc10.error?.message);
-
-        const subtotalCalc = items.reduce(
-          (sum, i) => sum + (i.variant?.price || i.menuItem.price || i.menuItem.base_price || 0) * i.quantity,
-          0
-        );
-        const deliveryFeeCalc = orderType === 'DELIVERY' ? 100 : 0;
-        const totalCalc = subtotalCalc + deliveryFeeCalc;
-        const fallbackOrderNumber = `OK-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
-        const fallbackTrackingToken = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `token-${Date.now()}`;
-
-        const { data: directOrder, error: directErr } = await supabase
-          .from('orders')
-          .insert({
-            branch_id: branchId,
-            customer_name: customerName.trim(),
-            customer_phone: customerPhone.trim(),
-            order_type: orderType,
-            table_id: tableId || null,
-            delivery_address: orderType === 'DELIVERY' ? deliveryAddress?.trim() : null,
-            delivery_notes: deliveryNotes?.trim() || null,
-            payment_method: paymentMethod || 'CASH',
-            payment_status: 'PENDING',
-            status: 'PENDING',
-            subtotal: subtotalCalc,
-            delivery_fee: deliveryFeeCalc,
-            total_amount: totalCalc,
-            order_number: fallbackOrderNumber,
-            tracking_token: fallbackTrackingToken,
-          })
-          .select('id, order_number, tracking_token, total_amount')
-          .single();
-
-        if (directErr || !directOrder) {
-          const cleanError = rpc9.error?.message || rpc10.error?.message || directErr?.message || 'Unknown error';
-          throw new Error(`Order placement failed: ${cleanError}`);
-        }
-
-        // Insert order items
-        await supabase.from('order_items').insert(
-          items.map((i) => ({
-            order_id: directOrder.id,
-            menu_item_id: i.menuItem.id,
-            variant_id: i.variant?.id || null,
-            item_name: i.menuItem.name,
-            variant_name: i.variant?.name || null,
-            unit_price: i.variant?.price || i.menuItem.price || i.menuItem.base_price || 0,
-            quantity: i.quantity,
-            subtotal_price: (i.variant?.price || i.menuItem.price || i.menuItem.base_price || 0) * i.quantity,
-            special_instructions: i.specialInstructions || null,
-          }))
-        );
-
-        data = [{
-          out_order_id: directOrder.id,
-          out_order_number: directOrder.order_number,
-          out_tracking_token: directOrder.tracking_token,
-          out_total_amount: directOrder.total_amount,
-        }];
+        const errorMsg = rpc10.error?.message || rpc9.error?.message || 'Failed to create order.';
+        throw new Error(`Order placement failed: ${errorMsg}`);
       }
     }
 
