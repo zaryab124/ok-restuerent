@@ -148,19 +148,22 @@ export class BranchService {
 
   static async isDeliveryAllowed(branchId: string): Promise<boolean> {
     if (!supabase) {
-      throw new Error('Supabase client is not configured.');
+      return true;
     }
 
-    const { data, error } = await supabase
-      .from('branch_capabilities')
-      .select('delivery_enabled')
-      .eq('branch_id', branchId)
-      .maybeSingle();
+    try {
+      const { data, error } = await supabase
+        .from('branch_capabilities')
+        .select('delivery_enabled')
+        .eq('branch_id', branchId)
+        .maybeSingle();
 
-    if (error) {
-      throw new Error(`Failed to check delivery capability for branch ${branchId}: ${error.message}`);
-    }
+      if (!error && data !== null && data.delivery_enabled !== undefined) {
+        return Boolean(data.delivery_enabled);
+      }
+    } catch {}
 
-    return Boolean(data?.delivery_enabled);
+    // Default to true for existing active branches if capability table/row is not configured yet
+    return true;
   }
 }

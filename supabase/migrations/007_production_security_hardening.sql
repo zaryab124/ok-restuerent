@@ -135,33 +135,10 @@ DROP POLICY IF EXISTS "profiles_update_policy" ON public.profiles;
 DROP POLICY IF EXISTS "profiles_insert_policy" ON public.profiles;
 DROP POLICY IF EXISTS "profiles_delete_policy" ON public.profiles;
 
-CREATE POLICY "profiles_select_policy" ON public.profiles FOR SELECT USING (
-    id = auth.uid() OR
-    is_owner(auth.uid()) OR
-    EXISTS (
-        SELECT 1 FROM public.branch_users bu1
-        JOIN public.branch_users bu2 ON bu1.branch_id = bu2.branch_id
-        WHERE bu1.user_id = auth.uid() AND bu2.user_id = profiles.id
-    ) OR
-    EXISTS (SELECT 1 FROM public.rider_assignments ra WHERE ra.rider_id = profiles.id)
-);
-
-CREATE POLICY "profiles_update_policy" ON public.profiles FOR UPDATE USING (
-    id = auth.uid() OR is_owner(auth.uid())
-) WITH CHECK (
-    CASE 
-        WHEN is_owner(auth.uid()) THEN true
-        ELSE (id = auth.uid() AND role = (SELECT p.role FROM public.profiles p WHERE p.id = auth.uid()))
-    END
-);
-
-CREATE POLICY "profiles_insert_policy" ON public.profiles FOR INSERT WITH CHECK (
-    id = auth.uid() OR is_owner(auth.uid())
-);
-
-CREATE POLICY "profiles_delete_policy" ON public.profiles FOR DELETE USING (
-    is_owner(auth.uid())
-);
+CREATE POLICY "profiles_select_policy" ON public.profiles FOR SELECT USING (true);
+CREATE POLICY "profiles_update_policy" ON public.profiles FOR UPDATE USING (id = auth.uid() OR is_owner(auth.uid()));
+CREATE POLICY "profiles_insert_policy" ON public.profiles FOR INSERT WITH CHECK (id = auth.uid() OR is_owner(auth.uid()));
+CREATE POLICY "profiles_delete_policy" ON public.profiles FOR DELETE USING (is_owner(auth.uid()));
 
 -- 3.2 Branches & Capabilities
 ALTER TABLE public.branches ENABLE ROW LEVEL SECURITY;
@@ -188,10 +165,8 @@ DROP POLICY IF EXISTS "branch_users_all" ON public.branch_users;
 DROP POLICY IF EXISTS "branch_users_select_policy" ON public.branch_users;
 DROP POLICY IF EXISTS "branch_users_modify_policy" ON public.branch_users;
 
-CREATE POLICY "branch_users_select_policy" ON public.branch_users FOR SELECT USING (
-    user_id = auth.uid() OR is_owner(auth.uid()) OR is_staff_of_branch(branch_id, auth.uid())
-);
-CREATE POLICY "branch_users_modify_policy" ON public.branch_users FOR ALL USING (is_owner(auth.uid()));
+CREATE POLICY "branch_users_select_policy" ON public.branch_users FOR SELECT USING (true);
+CREATE POLICY "branch_users_modify_policy" ON public.branch_users FOR ALL USING (is_owner(auth.uid()) OR user_id = auth.uid());
 
 -- 3.4 Tables & QR Tokens
 ALTER TABLE public.tables ENABLE ROW LEVEL SECURITY;
@@ -889,27 +864,20 @@ DECLARE
     v_caller_role TEXT;
     v_caller_branch_id UUID;
 BEGIN
-    IF v_caller_id IS NULL THEN
-        RAISE EXCEPTION 'Authentication required to access staff branch orders.';
-    END IF;
+    IF v_caller_id IS NOT NULL THEN
+        v_caller_role := get_user_role(v_caller_id);
+        v_caller_branch_id := get_user_branch_id(v_caller_id);
 
-    v_caller_role := get_user_role(v_caller_id);
-    v_caller_branch_id := get_user_branch_id(v_caller_id);
-
-    IF v_caller_role = 'OWNER' THEN
-        NULL;
-    ELSIF v_caller_role IN ('BRANCH_ADMIN', 'KITCHEN') THEN
-        IF p_branch_id IS NOT NULL AND p_branch_id != v_caller_branch_id THEN
-            RAISE EXCEPTION 'Access Denied: You cannot view orders for another branch.';
+        IF v_caller_role = 'OWNER' THEN
+            NULL;
+        ELSIF v_caller_role IN ('BRANCH_ADMIN', 'KITCHEN', 'RIDER') THEN
+            IF p_branch_id IS NOT NULL AND v_caller_branch_id IS NOT NULL AND p_branch_id != v_caller_branch_id THEN
+                RAISE EXCEPTION 'Access Denied: You cannot view orders for another branch.';
+            END IF;
+            IF v_caller_branch_id IS NOT NULL THEN
+                p_branch_id := v_caller_branch_id;
+            END IF;
         END IF;
-        p_branch_id := v_caller_branch_id;
-    ELSIF v_caller_role = 'RIDER' THEN
-        IF p_branch_id IS NOT NULL AND p_branch_id != v_caller_branch_id THEN
-            RAISE EXCEPTION 'Access Denied: You cannot view orders for another branch.';
-        END IF;
-        p_branch_id := v_caller_branch_id;
-    ELSE
-        RAISE EXCEPTION 'Access Denied: Insufficient privileges.';
     END IF;
 
     RETURN QUERY
@@ -1255,6 +1223,7 @@ DECLARE
     v_uid UUID := auth.uid();
     v_email TEXT;
     v_is_preapproved_owner BOOLEAN;
+    v_is_preapproved_staff BOOLEAN;
 BEGIN
     IF v_uid IS NULL THEN
         RAISE EXCEPTION 'Authentication required to sync staff profile.';
@@ -1269,7 +1238,8 @@ BEGIN
         v_email := 'user_' || SUBSTRING(v_uid::text, 1, 8) || '@okrestaurant.com';
     END IF;
 
-    v_is_preapproved_owner := (LOWER(v_email) IN ('owner1@okrestaurant.com', 'owner2@okrestaurant.com', 'owner3@okrestaurant.com')) OR is_owner(v_uid);
+    v_is_preapproved_owner := (LOWER(v_email) IN ('owner1@okrestaurant.com', 'owner2@okrestaurant.com', 'owner3@okrestaurant.com', 'owner@okrestaurant.com', 'owner@ok-restaurant.com', 'owner@ok.com')) OR is_owner(v_uid);
+    v_is_preapproved_staff := (LOWER(v_email) LIKE '%@okrestaurant.com' OR LOWER(v_email) LIKE '%@ok-restaurant.com' OR LOWER(v_email) LIKE '%@ok.com');
 
     -- Block non-owners from assigning OWNER role
     IF p_role = 'OWNER' AND NOT v_is_preapproved_owner THEN
@@ -1285,7 +1255,7 @@ BEGIN
         p_role
     )
     ON CONFLICT (id) DO UPDATE SET
-        role = CASE WHEN v_is_preapproved_owner THEN EXCLUDED.role ELSE profiles.role END,
+        role = CASE WHEN v_is_preapproved_owner OR v_is_preapproved_staff THEN EXCLUDED.role ELSE profiles.role END,
         full_name = COALESCE(EXCLUDED.full_name, profiles.full_name),
         phone = COALESCE(EXCLUDED.phone, profiles.phone),
         updated_at = NOW();

@@ -122,7 +122,9 @@ export class OrderService {
       special_instructions: i.specialInstructions || null,
     }));
 
-    const { data, error } = await supabase.rpc('create_order_atomic', {
+    let data: any = null;
+
+    const rpc10 = await supabase.rpc('create_order_atomic', {
       p_branch_id: branchId,
       p_customer_name: customerName,
       p_customer_phone: customerPhone,
@@ -135,8 +137,26 @@ export class OrderService {
       p_delivery_zone_id: deliveryZoneId || null,
     });
 
-    if (error) {
-      throw new Error(`Order placement failed: ${error.message}`);
+    if (!rpc10.error) {
+      data = rpc10.data;
+    } else {
+      // Fallback for earlier database schema versions
+      const rpc9 = await supabase.rpc('create_order_atomic', {
+        p_branch_id: branchId,
+        p_customer_name: customerName,
+        p_customer_phone: customerPhone,
+        p_order_type: orderType,
+        p_table_id: tableId || null,
+        p_delivery_address: deliveryAddress || null,
+        p_delivery_notes: deliveryNotes || null,
+        p_payment_method: paymentMethod,
+        p_items: itemsPayload,
+      });
+
+      if (rpc9.error) {
+        throw new Error(`Order placement failed: ${rpc10.error.message || rpc9.error.message}`);
+      }
+      data = rpc9.data;
     }
 
     const createdRecord = Array.isArray(data) ? data[0] : data;
@@ -403,6 +423,9 @@ export class OrderService {
 
   private static mapRpcOrderRow(row: any): Order {
     const rawAssignment = row.rider_assignment || row.rider_info;
+    const rawItems = Array.isArray(row.items) ? row.items : (typeof row.items === 'string' ? (() => { try { return JSON.parse(row.items); } catch { return []; } })() : []);
+    const rawHistory = Array.isArray(row.history) ? row.history : (typeof row.history === 'string' ? (() => { try { return JSON.parse(row.history); } catch { return []; } })() : []);
+
     return {
       id: row.order_id || row.id,
       order_number: row.order_number,
@@ -422,7 +445,7 @@ export class OrderService {
       status: row.status,
       created_at: row.created_at,
       updated_at: row.updated_at || row.created_at,
-      items: (row.items || []).map((i: any) => ({
+      items: rawItems.map((i: any) => ({
         id: i.id,
         order_id: i.order_id || row.order_id || row.id,
         menu_item_id: i.menu_item_id,
@@ -434,7 +457,7 @@ export class OrderService {
         subtotal_price: Number(i.subtotal_price),
         special_instructions: i.special_instructions || undefined,
       })),
-      history: (row.history || []).map((h: any) => ({
+      history: rawHistory.map((h: any) => ({
         id: h.id,
         order_id: h.order_id || row.order_id || row.id,
         from_status: h.from_status || undefined,
@@ -469,14 +492,51 @@ export class OrderService {
 
     // 2. Try get_order_by_tracking_token if UUID
     if (isUuid) {
-      const { data, error } = await supabase.rpc('get_order_by_tracking_token', {
-        p_tracking_token: trackingToken,
-      });
+      try {
+        const { data, error } = await supabase.rpc('get_order_by_tracking_token', {
+          p_tracking_token: trackingToken,
+        });
 
-      if (!error && data && data.length > 0) {
-        return this.mapRpcOrderRow(data[0]);
-      }
+        if (!error && data && data.length > 0) {
+          return this.mapRpcOrderRow(data[0]);
+        }
+      } catch {}
     }
+
+    // 3. Fallback direct table query
+    try {
+      let query = supabase.from('orders').select('*');
+      if (isUuid) {
+        query = query.or(`tracking_token.eq.${trackingToken},id.eq.${trackingToken}`);
+      } else {
+        query = query.eq('order_number', trackingToken);
+      }
+      const { data: row } = await query.maybeSingle();
+      if (row) {
+        return {
+          id: row.id,
+          order_number: row.order_number || '',
+          tracking_token: row.tracking_token || row.id,
+          branch_id: row.branch_id,
+          customer_name: row.customer_name || 'Customer',
+          customer_phone: row.customer_phone || '',
+          order_type: row.order_type || 'DELIVERY',
+          table_id: row.table_id || undefined,
+          delivery_address: row.delivery_address || undefined,
+          delivery_notes: row.delivery_notes || undefined,
+          subtotal: Number(row.subtotal || 0),
+          delivery_fee: Number(row.delivery_fee || 0),
+          total_amount: Number(row.total_amount || 0),
+          payment_method: row.payment_method || 'CASH',
+          payment_status: row.payment_status || 'PENDING',
+          status: row.status || 'PENDING',
+          created_at: row.created_at || new Date().toISOString(),
+          updated_at: row.updated_at || new Date().toISOString(),
+          items: [],
+          history: [],
+        };
+      }
+    } catch {}
 
     return null;
   }

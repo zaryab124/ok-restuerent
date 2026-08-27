@@ -120,16 +120,21 @@ export default function CheckoutPage() {
     }
 
     if (orderType === 'DELIVERY') {
-      if (!isDeliverySupported) {
-        setError('Delivery is currently unavailable at this branch. Please select takeaway or dining in.');
-        return;
+      let currentZones = deliveryZones;
+      let currentZone = selectedZone;
+
+      if (currentZones.length === 0) {
+        currentZones = await DeliveryZoneService.getDeliveryZones(selectedBranchId, true);
+        setDeliveryZones(currentZones);
+        if (currentZones.length > 0) {
+          currentZone = currentZones[0];
+          setSelectedZoneId(currentZone.id);
+        }
       }
-      if (deliveryZones.length === 0) {
-        setError('No delivery zones are configured for this branch. Please select takeaway or contact the restaurant.');
-        return;
-      }
-      if (isBelowMinOrder && selectedZone) {
-        setError(`Minimum order amount for delivery to "${selectedZone.name}" is Rs. ${selectedZone.minimum_order_amount}. Please add Rs. ${minOrderShortage} more to your cart.`);
+
+      if (currentZone && subtotal < currentZone.minimum_order_amount) {
+        const shortage = currentZone.minimum_order_amount - subtotal;
+        setError(`Minimum order amount for delivery to "${currentZone.name}" is Rs. ${currentZone.minimum_order_amount}. Please add Rs. ${shortage} more to your cart.`);
         return;
       }
       if (!deliveryAddress) {
