@@ -2,18 +2,20 @@
 
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ChefHat, Clock, CheckCircle, Utensils, MapPin, RefreshCw, Flame, Sparkles, LogOut, AlertCircle, Search, X } from 'lucide-react';
+import { ChefHat, Clock, CheckCircle, Utensils, MapPin, RefreshCw, Flame, Sparkles, LogOut, AlertCircle, Search, X, Printer, Receipt } from 'lucide-react';
 import { Branch, Order, OrderStatus, MenuItem } from '@/lib/types';
 import { BranchService } from '@/lib/services/branch-service';
 import { OrderService } from '@/lib/services/order-service';
 import { MenuService } from '@/lib/services/menu-service';
 import { AuthService, AuthenticatedUser } from '@/lib/services/auth-service';
+import { OrderReceiptModal } from '@/components/OrderReceiptModal';
 
 export default function KitchenDisplaySystem() {
   const router = useRouter();
   const [branches, setBranches] = useState<Branch[]>([]);
   const [selectedBranchId, setSelectedBranchId] = useState<string>('b1000000-0000-0000-0000-000000000001');
   const [orders, setOrders] = useState<Order[]>([]);
+  const [selectedReceiptOrder, setSelectedReceiptOrder] = useState<Order | null>(null);
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [isStockDrawerOpen, setIsStockDrawerOpen] = useState(false);
   const [stockSearchQuery, setStockSearchQuery] = useState('');
@@ -254,10 +256,27 @@ export default function KitchenDisplaySystem() {
                       {o.order_type} {o.table_id ? `• Table ${o.table_id}` : ''}
                     </span>
                   </div>
-                  <span className="text-[11px] font-mono text-slate-400 flex items-center gap-1 bg-slate-950 px-2 py-1 rounded-lg">
-                    <Clock className="w-3 h-3 text-amber-400" /> {new Date(o.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedReceiptOrder(o)}
+                      className="p-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-amber-400 border border-slate-700 transition-colors cursor-pointer"
+                      title="Print KOT Receipt"
+                    >
+                      <Printer className="w-3.5 h-3.5" />
+                    </button>
+                    <span className="text-[11px] font-mono text-slate-400 flex items-center gap-1 bg-slate-950 px-2 py-1 rounded-lg">
+                      <Clock className="w-3 h-3 text-amber-400" /> {new Date(o.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  </div>
                 </div>
+
+                {o.order_type === 'DELIVERY' && o.delivery_address && (
+                  <div className="text-[11px] font-bold text-amber-300 bg-slate-950 p-2 rounded-xl border border-slate-800 flex items-start gap-1.5">
+                    <MapPin className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
+                    <span className="line-clamp-2">{o.delivery_address}</span>
+                  </div>
+                )}
 
                 <div className="space-y-2 border-t border-b border-slate-800/80 py-3 text-xs">
                   {o.items?.map((item, i) => (
@@ -300,10 +319,27 @@ export default function KitchenDisplaySystem() {
                       {o.order_type} {o.table_id ? `• Table ${o.table_id}` : ''}
                     </span>
                   </div>
-                  <span className="text-[11px] font-mono text-slate-400 flex items-center gap-1 bg-slate-950 px-2 py-1 rounded-lg">
-                    <Clock className="w-3 h-3 text-blue-400" /> Cooking...
-                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedReceiptOrder(o)}
+                      className="p-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-blue-400 border border-slate-700 transition-colors cursor-pointer"
+                      title="Print KOT Receipt"
+                    >
+                      <Printer className="w-3.5 h-3.5" />
+                    </button>
+                    <span className="text-[11px] font-mono text-slate-400 flex items-center gap-1 bg-slate-950 px-2 py-1 rounded-lg">
+                      <Clock className="w-3 h-3 text-blue-400" /> Cooking...
+                    </span>
+                  </div>
                 </div>
+
+                {o.order_type === 'DELIVERY' && o.delivery_address && (
+                  <div className="text-[11px] font-bold text-amber-300 bg-slate-950 p-2 rounded-xl border border-slate-800 flex items-start gap-1.5">
+                    <MapPin className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
+                    <span className="line-clamp-2">{o.delivery_address}</span>
+                  </div>
+                )}
 
                 <div className="space-y-2 border-t border-b border-slate-800/80 py-3 text-xs">
                   {o.items?.map((item, i) => (
@@ -343,10 +379,27 @@ export default function KitchenDisplaySystem() {
                       {o.order_type} {o.table_id ? `• Table ${o.table_id}` : ''}
                     </span>
                   </div>
-                  <span className="text-[10px] font-extrabold uppercase bg-emerald-500/20 text-emerald-400 px-2 py-1 rounded-lg">
-                    Ready
-                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedReceiptOrder(o)}
+                      className="p-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-emerald-400 border border-slate-700 transition-colors cursor-pointer"
+                      title="Print Receipt Slip"
+                    >
+                      <Printer className="w-3.5 h-3.5" />
+                    </button>
+                    <span className="text-[10px] font-extrabold uppercase bg-emerald-500/20 text-emerald-400 px-2 py-1 rounded-lg">
+                      Ready
+                    </span>
+                  </div>
                 </div>
+
+                {o.order_type === 'DELIVERY' && o.delivery_address && (
+                  <div className="text-[11px] font-bold text-amber-300 bg-slate-950 p-2 rounded-xl border border-slate-800 flex items-start gap-1.5">
+                    <MapPin className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
+                    <span className="line-clamp-2">{o.delivery_address}</span>
+                  </div>
+                )}
 
                 <div className="space-y-1 text-xs text-slate-300">
                   {o.items?.map((item, i) => (
@@ -464,6 +517,13 @@ export default function KitchenDisplaySystem() {
           </div>
         </div>
       )}
+
+      {/* Printable KOT / Order Receipt Modal */}
+      <OrderReceiptModal
+        order={selectedReceiptOrder}
+        branchName={branches.find((b) => b.id === selectedBranchId)?.name || 'OK Restaurant'}
+        onClose={() => setSelectedReceiptOrder(null)}
+      />
 
     </div>
   );

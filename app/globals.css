@@ -36,3 +36,32 @@
 ::-webkit-scrollbar-thumb:hover {
   background: #374151;
 }
+
+@media print {
+  body {
+    background: white !important;
+    color: black !important;
+  }
+  body * {
+    visibility: hidden;
+  }
+  #printable-receipt, #printable-receipt * {
+    visibility: visible;
+  }
+  #printable-receipt {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    max-width: 420px;
+    margin: 0 auto;
+    padding: 12px;
+    background: white !important;
+    color: black !important;
+    box-shadow: none !important;
+  }
+  @page {
+    margin: 0.5cm;
+    size: auto;
+  }
+}

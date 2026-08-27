@@ -14,12 +14,14 @@ import { BuffetService } from '@/lib/services/buffet-service';
 import { DeliveryZoneService } from '@/lib/services/delivery-zone-service';
 import { AuthService, AuthenticatedUser } from '@/lib/services/auth-service';
 import { OrderStatusBadge } from '@/components/OrderStatusBadge';
+import { OrderReceiptModal } from '@/components/OrderReceiptModal';
 
 export default function BranchAdminPortal() {
   const router = useRouter();
   const [branches, setBranches] = useState<Branch[]>([]);
   const [selectedBranchId, setSelectedBranchId] = useState<string>('b1000000-0000-0000-0000-000000000001');
   const [orders, setOrders] = useState<Order[]>([]);
+  const [selectedReceiptOrder, setSelectedReceiptOrder] = useState<Order | null>(null);
   const [tables, setTables] = useState<RestaurantTable[]>([]);
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [categories, setCategories] = useState<MenuCategory[]>([]);
@@ -656,7 +658,20 @@ export default function BranchAdminPortal() {
                       </td>
                       <td className="p-4">
                         <span className="font-bold text-white block">{o.customer_name}</span>
-                        <span className="text-[10px] text-slate-400">{o.customer_phone}</span>
+                        <span className="text-[11px] text-slate-400 font-mono block">{o.customer_phone}</span>
+                        {o.order_type === 'DELIVERY' && o.delivery_address && (
+                          <div className="mt-1.5 text-[11px] font-bold text-amber-300 bg-amber-500/10 border border-amber-500/20 px-2.5 py-1.5 rounded-xl max-w-[240px] leading-snug">
+                            <span className="text-[10px] text-amber-400/90 flex items-center gap-1 uppercase font-black">
+                              <MapPin className="w-3 h-3 text-amber-400 inline" /> Destination:
+                            </span>
+                            {o.delivery_address}
+                            {o.delivery_notes && (
+                              <span className="block text-[10px] text-slate-400 italic mt-0.5">
+                                Note: {o.delivery_notes}
+                              </span>
+                            )}
+                          </div>
+                        )}
                       </td>
                       <td className="p-4">
                         {o.items?.map((item, i) => (
@@ -671,6 +686,14 @@ export default function BranchAdminPortal() {
                       </td>
                       <td className="p-4 text-right">
                         <div className="flex items-center justify-end gap-2 flex-wrap">
+                          <button
+                            type="button"
+                            onClick={() => setSelectedReceiptOrder(o)}
+                            className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white border border-slate-700 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1 shadow-sm"
+                            title="View & Print PDF Receipt"
+                          >
+                            <Printer className="w-3.5 h-3.5 text-amber-400" /> Receipt / PDF
+                          </button>
                           {o.status === 'PENDING' && (
                             <>
                               <button
@@ -1466,6 +1489,13 @@ export default function BranchAdminPortal() {
           </div>
         </div>
       )}
+
+      {/* Printable Receipt & Dispatch Slip Modal */}
+      <OrderReceiptModal
+        order={selectedReceiptOrder}
+        branchName={activeBranch?.name || 'OK Restaurant'}
+        onClose={() => setSelectedReceiptOrder(null)}
+      />
 
     </div>
   );
