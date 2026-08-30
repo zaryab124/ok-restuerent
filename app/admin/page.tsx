@@ -248,15 +248,25 @@ export default function BranchAdminPortal() {
   const handleCreateTable = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTableNumber) return;
-    await QRService.createTable(selectedBranchId, newTableNumber);
-    setNewTableNumber('');
-    loadBranchData(selectedBranchId);
+    try {
+      const targetBranch = selectedBranchId === 'all' 
+        ? (adminUser?.branch_id || 'b1000000-0000-0000-0000-000000000001') 
+        : selectedBranchId;
+      await QRService.createTable(targetBranch, newTableNumber);
+      setNewTableNumber('');
+      loadBranchData(selectedBranchId);
+    } catch (err: any) {
+      console.error('Failed to create dining table:', err);
+      alert(`Failed to register dining table: ${err?.message || 'Unknown error'}`);
+    }
   };
 
   const handleGenerateQRModal = async (t: RestaurantTable) => {
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+    const appUrl = typeof window !== 'undefined' && window.location.origin
+      ? window.location.origin
+      : (process.env.NEXT_PUBLIC_APP_URL || 'https://ok-restuerent.vercel.app');
     const fullUrl = `${appUrl}/table/${t.qr_code_token}`;
-    const qrDataUrl = await QRCode.toDataURL(fullUrl, { width: 300, margin: 2 });
+    const qrDataUrl = await QRCode.toDataURL(fullUrl, { width: 350, margin: 2 });
     setQrModalData({ tableNumber: t.table_number, qrUrl: qrDataUrl, tokenUrl: fullUrl });
   };
 
@@ -1458,32 +1468,38 @@ export default function BranchAdminPortal() {
 
       {/* QR Code Printable Modal */}
       {qrModalData && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fadeIn">
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-sm w-full text-center space-y-4 shadow-2xl">
-            <h3 className="text-lg font-black text-white">Table {qrModalData.tableNumber} QR Code</h3>
-            <p className="text-xs text-slate-400">{activeBranch?.name}</p>
-
-            <div className="p-4 bg-white rounded-2xl inline-block shadow-inner">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={qrModalData.qrUrl} alt="QR Code" className="w-48 h-48 mx-auto" />
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fadeIn print:p-0 print:bg-white">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-sm w-full text-center space-y-4 shadow-2xl print:border-none print:shadow-none print:bg-white print:p-0">
+            <div className="border-b border-slate-800 pb-3 print:border-black">
+              <span className="text-[11px] font-black uppercase tracking-widest text-amber-500 print:text-black">OK RESTAURANT</span>
+              <h3 className="text-xl font-black text-white print:text-black mt-1">Table {qrModalData.tableNumber}</h3>
+              <p className="text-xs text-slate-400 print:text-black font-semibold">{activeBranch?.name}</p>
             </div>
 
-            <p className="text-[10px] text-slate-500 font-mono break-all bg-slate-950 p-2 rounded-xl border border-slate-800">
-              {qrModalData.tokenUrl}
-            </p>
+            <div className="p-4 bg-white rounded-2xl inline-block shadow-inner print:p-2">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={qrModalData.qrUrl} alt={`Table ${qrModalData.tableNumber} QR`} className="w-56 h-56 mx-auto" />
+            </div>
 
-            <div className="flex gap-2">
+            <div className="space-y-1">
+              <p className="text-xs font-bold text-amber-400 print:text-black">Scan to View Menu & Order</p>
+              <p className="text-[10px] text-slate-500 print:text-gray-600 font-mono break-all bg-slate-950 print:bg-gray-100 p-2 rounded-xl border border-slate-800 print:border-gray-300">
+                {qrModalData.tokenUrl}
+              </p>
+            </div>
+
+            <div className="flex gap-2 print:hidden">
               <button
                 onClick={() => setQrModalData(null)}
-                className="flex-1 py-2 bg-slate-800 text-slate-300 rounded-xl text-xs font-bold"
+                className="flex-1 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold transition-colors"
               >
                 Close
               </button>
               <button
                 onClick={() => window.print()}
-                className="flex-1 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 rounded-xl text-xs font-black flex items-center justify-center gap-1.5"
+                className="flex-1 py-2.5 bg-amber-500 hover:bg-amber-600 text-slate-950 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 transition-colors shadow-lg shadow-amber-500/20"
               >
-                <Printer className="w-4 h-4" /> Print QR
+                <Printer className="w-4 h-4" /> Print QR Standee
               </button>
             </div>
           </div>

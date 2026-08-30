@@ -89,17 +89,35 @@ export class QRService {
       .eq('id', branchId)
       .maybeSingle();
 
-    if (branchError || !branch) {
-      throw new Error(`Branch not found for ID (${branchId}): ${branchError?.message || ''}`);
-    }
+    const branchSlug = branch?.slug || 'ok';
+    const token = this.generateSecureToken(branchSlug, tableNumber);
 
-    const token = this.generateSecureToken(branch.slug, tableNumber);
+    // 1. Try RPC first
+    try {
+      const { data: rpcData, error: rpcError } = await supabase.rpc('create_restaurant_table', {
+        p_branch_id: branchId,
+        p_table_number: tableNumber.trim(),
+        p_qr_code_token: token,
+      });
 
+      if (!rpcError && rpcData && rpcData.length > 0) {
+        const row = rpcData[0];
+        return {
+          id: row.id,
+          branch_id: row.branch_id,
+          table_number: row.table_number,
+          qr_code_token: row.qr_code_token,
+          is_active: Boolean(row.is_active),
+        };
+      }
+    } catch {}
+
+    // 2. Direct table insert fallback
     const { data: newTable, error: createError } = await supabase
       .from('tables')
       .insert({
         branch_id: branchId,
-        table_number: tableNumber,
+        table_number: tableNumber.trim(),
         qr_code_token: token,
         is_active: true,
       })
