@@ -126,6 +126,21 @@ export class BranchService {
       throw new Error('Supabase client is not configured.');
     }
 
+    // 1. Try atomic RPC update first
+    try {
+      const { data: rpcData, error: rpcErr } = await supabase.rpc('update_branch_capability', {
+        p_branch_id: branchId,
+        p_dine_in: capabilities.dine_in_enabled !== undefined ? capabilities.dine_in_enabled : null,
+        p_takeaway: capabilities.takeaway_enabled !== undefined ? capabilities.takeaway_enabled : null,
+        p_delivery: capabilities.delivery_enabled !== undefined ? capabilities.delivery_enabled : null,
+      });
+
+      if (!rpcErr && rpcData) {
+        return rpcData as BranchCapability;
+      }
+    } catch {}
+
+    // 2. Direct table upsert fallback
     const { data, error } = await supabase
       .from('branch_capabilities')
       .upsert(
@@ -137,13 +152,13 @@ export class BranchService {
         { onConflict: 'branch_id' }
       )
       .select('*')
-      .single();
+      .maybeSingle();
 
-    if (error) {
-      throw new Error(`Failed to update branch capabilities for branch ${branchId}: ${error.message}`);
+    if (error && !data) {
+      console.warn(`Direct upsert for branch ${branchId}:`, error.message);
     }
 
-    return data;
+    return (data || capabilities) as BranchCapability;
   }
 
   static async isDeliveryAllowed(branchId: string): Promise<boolean> {

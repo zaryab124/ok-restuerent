@@ -121,8 +121,42 @@ export default function OwnerExecutivePortal() {
   };
 
   const handleToggleCapability = async (branchId: string, capKey: 'dine_in_enabled' | 'takeaway_enabled' | 'delivery_enabled', currentValue: boolean) => {
-    await BranchService.updateBranchCapabilities(branchId, { [capKey]: !currentValue });
-    loadOwnerData();
+    const nextVal = !currentValue;
+
+    // 1. Instant Optimistic UI Update (0ms delay)
+    setBranches((prev) =>
+      prev.map((b) =>
+        b.id === branchId
+          ? {
+              ...b,
+              capabilities: {
+                ...b.capabilities,
+                [capKey]: nextVal,
+              },
+            }
+          : b
+      )
+    );
+
+    try {
+      await BranchService.updateBranchCapabilities(branchId, { [capKey]: nextVal });
+    } catch (err: any) {
+      console.error('Failed to toggle branch capability:', err);
+      // Revert on error
+      setBranches((prev) =>
+        prev.map((b) =>
+          b.id === branchId
+            ? {
+                ...b,
+                capabilities: {
+                  ...b.capabilities,
+                  [capKey]: currentValue,
+                },
+              }
+            : b
+        )
+      );
+    }
   };
 
   const handleSaveBankConfig = async (e: React.FormEvent) => {
