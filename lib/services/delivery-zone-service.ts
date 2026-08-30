@@ -175,22 +175,51 @@ export class DeliveryZoneService {
       throw new Error('Supabase client is not configured.');
     }
 
-    const { data, error } = await supabase.rpc('manage_delivery_zone', {
-      p_zone_id: zone.id || null,
-      p_branch_id: zone.branch_id,
-      p_name: zone.name,
-      p_delivery_fee: zone.delivery_fee,
-      p_minimum_order_amount: zone.minimum_order_amount ?? 0,
-      p_estimated_delivery_minutes: zone.estimated_delivery_minutes ?? 35,
-      p_is_active: zone.is_active ?? true,
-      p_sort_order: zone.sort_order ?? 0,
-    });
+    // 1. Try RPC first
+    try {
+      const { data, error } = await supabase.rpc('manage_delivery_zone', {
+        p_zone_id: zone.id || null,
+        p_branch_id: zone.branch_id,
+        p_name: zone.name,
+        p_delivery_fee: zone.delivery_fee,
+        p_minimum_order_amount: zone.minimum_order_amount ?? 0,
+        p_estimated_delivery_minutes: zone.estimated_delivery_minutes ?? 35,
+        p_is_active: zone.is_active ?? true,
+        p_sort_order: zone.sort_order ?? 0,
+      });
 
-    if (error) {
-      throw new Error(`Failed to save delivery zone: ${error.message}`);
+      if (!error && data) {
+        return data as string;
+      }
+    } catch {}
+
+    // 2. Direct table upsert fallback
+    const payload: any = {
+      branch_id: zone.branch_id,
+      name: zone.name.trim(),
+      delivery_fee: zone.delivery_fee,
+      minimum_order_amount: zone.minimum_order_amount ?? 0,
+      estimated_delivery_minutes: zone.estimated_delivery_minutes ?? 35,
+      is_active: zone.is_active ?? true,
+      sort_order: zone.sort_order ?? 0,
+      updated_at: new Date().toISOString(),
+    };
+
+    if (zone.id) {
+      payload.id = zone.id;
     }
 
-    return data as string;
+    const { data: directData, error: directErr } = await supabase
+      .from('delivery_zones')
+      .upsert(payload)
+      .select('id')
+      .single();
+
+    if (directErr) {
+      throw new Error(`Failed to save delivery zone: ${directErr.message}`);
+    }
+
+    return directData?.id || zone.id || '';
   }
 
   /**
@@ -201,14 +230,27 @@ export class DeliveryZoneService {
       throw new Error('Supabase client is not configured.');
     }
 
-    const { data, error } = await supabase.rpc('delete_delivery_zone', {
-      p_zone_id: zoneId,
-    });
+    // 1. Try RPC first
+    try {
+      const { data, error } = await supabase.rpc('delete_delivery_zone', {
+        p_zone_id: zoneId,
+      });
 
-    if (error) {
-      throw new Error(`Failed to delete delivery zone: ${error.message}`);
+      if (!error) {
+        return Boolean(data);
+      }
+    } catch {}
+
+    // 2. Direct table delete fallback
+    const { error: directErr } = await supabase
+      .from('delivery_zones')
+      .delete()
+      .eq('id', zoneId);
+
+    if (directErr) {
+      throw new Error(`Failed to delete delivery zone: ${directErr.message}`);
     }
 
-    return Boolean(data);
+    return true;
   }
 }
