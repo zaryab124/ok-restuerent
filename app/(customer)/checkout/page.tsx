@@ -3,13 +3,11 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, ShoppingBag, MapPin, Bike, Utensils, AlertCircle, CheckCircle, CreditCard, DollarSign, Smartphone, Landmark, Copy, Check } from 'lucide-react';
+import { ArrowLeft, ShoppingBag, MapPin, Bike, Utensils, AlertCircle, CheckCircle, DollarSign } from 'lucide-react';
 import { Branch, OrderType, PaymentMethod, CartItem, DeliveryZone } from '@/lib/types';
 import { BranchService } from '@/lib/services/branch-service';
 import { OrderService } from '@/lib/services/order-service';
 import { DeliveryZoneService } from '@/lib/services/delivery-zone-service';
-import { PaymentService } from '@/lib/services/payment-service';
-import { MerchantConfigService, MerchantBankConfig } from '@/lib/services/merchant-config-service';
 
 export default function CheckoutPage() {
   const router = useRouter();
@@ -22,13 +20,10 @@ export default function CheckoutPage() {
   const [deliveryNotes, setDeliveryNotes] = useState<string>('');
   const [tableNumber, setTableNumber] = useState<string>('');
   const [tableId, setTableId] = useState<string | undefined>(undefined);
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('CASH');
-  const [onlineAccountMobile, setOnlineAccountMobile] = useState<string>('');
-  const [merchantBankConfig, setMerchantBankConfig] = useState<MerchantBankConfig | null>(null);
+  const [paymentMethod] = useState<PaymentMethod>('CASH');
   const [cart, setCart] = useState<CartItem[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState<boolean>(false);
-  const [copiedText, setCopiedText] = useState<string | null>(null);
   const [isDeliverySupported, setIsDeliverySupported] = useState<boolean>(true);
   const [deliveryZones, setDeliveryZones] = useState<DeliveryZone[]>([]);
   const [selectedZoneId, setSelectedZoneId] = useState<string>('');
@@ -61,8 +56,6 @@ export default function CheckoutPage() {
       setBranches(bList);
       if (bList.length > 0) setSelectedBranchId(bList[0].id);
     });
-
-    MerchantConfigService.getConfig().then(setMerchantBankConfig);
 
     const savedCart = localStorage.getItem('ok_cart');
     if (savedCart) {
@@ -98,12 +91,6 @@ export default function CheckoutPage() {
   const isBelowMinOrder = orderType === 'DELIVERY' && selectedZone && subtotal < selectedZone.minimum_order_amount;
   const minOrderShortage = isBelowMinOrder && selectedZone ? selectedZone.minimum_order_amount - subtotal : 0;
   const totalAmount = subtotal + deliveryFee;
-
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text);
-    setCopiedText(text);
-    setTimeout(() => setCopiedText(null), 2500);
-  };
 
   const handleSubmitOrder = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -161,29 +148,8 @@ export default function CheckoutPage() {
       localStorage.removeItem('ok_cart');
       localStorage.removeItem('ok_qr_session');
 
-      // 1. CASH Orders: Immediate order confirmation with PENDING payment settled on counter/delivery
-      if (paymentMethod === 'CASH') {
-        router.push(`/order-tracking/${order.tracking_token || order.id}`);
-        return;
-      }
-
-      // 2. Online Payment Gateway (SAFEPAY, CARD, JAZZCASH, EASYPAISA, ONLINE)
-      const checkoutRes = await PaymentService.processPayment(
-        order.total_amount,
-        paymentMethod,
-        {
-          name: customerName,
-          phone: customerPhone,
-          orderId: order.id,
-        }
-      );
-
-      if (checkoutRes.success && checkoutRes.checkoutUrl) {
-        // Authoritative redirect to Safepay hosted checkout
-        window.location.href = checkoutRes.checkoutUrl;
-      } else {
-        router.push(`/order-tracking/${order.tracking_token || order.id}?payment_warning=${encodeURIComponent(checkoutRes.message || 'Payment processing')}`);
-      }
+      // Cash on Delivery: Immediate order confirmation
+      router.push(`/order-tracking/${order.tracking_token || order.id}`);
     } catch (err: any) {
       setError(err.message || 'Failed to submit order.');
       setSubmitting(false);
@@ -438,163 +404,31 @@ export default function CheckoutPage() {
                 </div>
               </div>
 
-              {/* Online Payment Method Selector & Merchant Bank Info Display */}
-              <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 space-y-4">
+              {/* Payment Method - Cash on Delivery Only */}
+              <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 space-y-4 shadow-xl">
                 <h3 className="text-sm font-black text-white uppercase tracking-wider flex items-center justify-between">
                   <span>Payment Method</span>
-                  <span className="text-[10px] text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20 uppercase">
-                    Bank Accounts & Wallets
+                  <span className="text-[10px] text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-full border border-emerald-500/20 font-bold uppercase">
+                    Cash on Delivery
                   </span>
                 </h3>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                  {/* Cash */}
-                  <button
-                    type="button"
-                    onClick={() => setPaymentMethod('CASH')}
-                    className={`p-3.5 rounded-2xl border text-left flex items-center justify-between font-bold transition-all ${
-                      paymentMethod === 'CASH'
-                        ? 'bg-amber-500/10 border-amber-500 text-white'
-                        : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700'
-                    }`}
-                  >
-                    <span className="flex items-center gap-2">
-                      <DollarSign className="w-4 h-4 text-emerald-400" /> Cash on Delivery / Counter
-                    </span>
-                    {paymentMethod === 'CASH' && <CheckCircle className="w-4 h-4 text-amber-400" />}
-                  </button>
-
-                  {/* JazzCash */}
-                  <button
-                    type="button"
-                    onClick={() => setPaymentMethod('JAZZCASH')}
-                    className={`p-3.5 rounded-2xl border text-left flex items-center justify-between font-bold transition-all ${
-                      paymentMethod === 'JAZZCASH'
-                        ? 'bg-amber-500/10 border-amber-500 text-white'
-                        : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700'
-                    }`}
-                  >
-                    <span className="flex items-center gap-2">
-                      <Smartphone className="w-4 h-4 text-rose-500" /> JazzCash Wallet
-                    </span>
-                    {paymentMethod === 'JAZZCASH' && <CheckCircle className="w-4 h-4 text-amber-400" />}
-                  </button>
-
-                  {/* EasyPaisa */}
-                  <button
-                    type="button"
-                    onClick={() => setPaymentMethod('EASYPAISA')}
-                    className={`p-3.5 rounded-2xl border text-left flex items-center justify-between font-bold transition-all ${
-                      paymentMethod === 'EASYPAISA'
-                        ? 'bg-amber-500/10 border-amber-500 text-white'
-                        : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700'
-                    }`}
-                  >
-                    <span className="flex items-center gap-2">
-                      <Smartphone className="w-4 h-4 text-emerald-500" /> EasyPaisa Wallet
-                    </span>
-                    {paymentMethod === 'EASYPAISA' && <CheckCircle className="w-4 h-4 text-amber-400" />}
-                  </button>
-
-                  {/* Bank Transfer / Card */}
-                  <button
-                    type="button"
-                    onClick={() => setPaymentMethod('ONLINE')}
-                    className={`p-3.5 rounded-2xl border text-left flex items-center justify-between font-bold transition-all ${
-                      paymentMethod === 'ONLINE'
-                        ? 'bg-amber-500/10 border-amber-500 text-white'
-                        : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700'
-                    }`}
-                  >
-                    <span className="flex items-center gap-2">
-                      <Landmark className="w-4 h-4 text-blue-400" /> Direct Bank Transfer
-                    </span>
-                    {paymentMethod === 'ONLINE' && <CheckCircle className="w-4 h-4 text-amber-400" />}
-                  </button>
-                </div>
-
-                {/* Display Official Merchant Bank Account Credentials */}
-                {merchantBankConfig && (
-                  <div className="mt-4 p-4 rounded-2xl bg-slate-950 border border-amber-500/20 space-y-3 animate-fadeIn text-xs">
-                    <h4 className="font-extrabold text-amber-400 flex items-center justify-between text-xs border-b border-slate-800 pb-2">
-                      <span className="flex items-center gap-1.5">
-                        <Landmark className="w-4 h-4" /> Official Bank & Merchant Details
+                <div className="p-4 rounded-2xl bg-slate-950 border border-emerald-500/30 flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-3.5">
+                    <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold">
+                      <DollarSign className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <span className="font-extrabold text-white text-sm block">
+                        Cash on Delivery / Pay at Counter
                       </span>
-                      <span className="text-[10px] text-slate-500">Payable Amount: Rs. {totalAmount}</span>
-                    </h4>
-
-                    {paymentMethod === 'JAZZCASH' && (
-                      <div className="space-y-1.5 text-slate-300">
-                        <div className="flex justify-between items-center">
-                          <span>JazzCash Account Name: <strong className="text-white">{merchantBankConfig.jazzcashAccountName}</strong></span>
-                        </div>
-                        <div className="flex justify-between items-center p-2 rounded-lg bg-slate-900 border border-slate-800">
-                          <span className="font-mono text-amber-400 font-extrabold">Till/Number: {merchantBankConfig.jazzcashTillNumber}</span>
-                          <button
-                            type="button"
-                            onClick={() => copyToClipboard(merchantBankConfig.jazzcashTillNumber)}
-                            className="text-[10px] text-slate-400 hover:text-white flex items-center gap-1"
-                          >
-                            {copiedText === merchantBankConfig.jazzcashTillNumber ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                          </button>
-                        </div>
-                      </div>
-                    )}
-
-                    {paymentMethod === 'EASYPAISA' && (
-                      <div className="space-y-1.5 text-slate-300">
-                        <div className="flex justify-between items-center">
-                          <span>EasyPaisa Account Name: <strong className="text-white">{merchantBankConfig.easypaisaAccountName}</strong></span>
-                        </div>
-                        <div className="flex justify-between items-center p-2 rounded-lg bg-slate-900 border border-slate-800">
-                          <span className="font-mono text-emerald-400 font-extrabold">Till/Store ID: {merchantBankConfig.easypaisaTillNumber}</span>
-                          <button
-                            type="button"
-                            onClick={() => copyToClipboard(merchantBankConfig.easypaisaTillNumber)}
-                            className="text-[10px] text-slate-400 hover:text-white flex items-center gap-1"
-                          >
-                            {copiedText === merchantBankConfig.easypaisaTillNumber ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                          </button>
-                        </div>
-                      </div>
-                    )}
-
-                    {paymentMethod === 'ONLINE' && (
-                      <div className="space-y-2 text-slate-300">
-                        <div className="flex justify-between items-center">
-                          <span>Bank: <strong className="text-white">{merchantBankConfig.bankName}</strong></span>
-                          <span>Title: <strong className="text-white">{merchantBankConfig.accountTitle}</strong></span>
-                        </div>
-                        <div className="flex justify-between items-center p-2 rounded-lg bg-slate-900 border border-slate-800">
-                          <span className="font-mono text-blue-400 font-extrabold">Account: {merchantBankConfig.accountNumber}</span>
-                          <button
-                            type="button"
-                            onClick={() => copyToClipboard(merchantBankConfig.accountNumber)}
-                            className="text-[10px] text-slate-400 hover:text-white flex items-center gap-1"
-                          >
-                            {copiedText === merchantBankConfig.accountNumber ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                          </button>
-                        </div>
-                        <div className="flex justify-between items-center p-2 rounded-lg bg-slate-900 border border-slate-800">
-                          <span className="font-mono text-xs text-amber-400">IBAN: {merchantBankConfig.iban}</span>
-                          <button
-                            type="button"
-                            onClick={() => copyToClipboard(merchantBankConfig.iban)}
-                            className="text-[10px] text-slate-400 hover:text-white flex items-center gap-1"
-                          >
-                            {copiedText === merchantBankConfig.iban ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                          </button>
-                        </div>
-                      </div>
-                    )}
-
-                    {paymentMethod === 'CASH' && (
-                      <p className="text-slate-400 text-[11px]">
+                      <span className="text-[11px] text-slate-400">
                         Pay cash directly to the delivery rider or counter receptionist upon order delivery.
-                      </p>
-                    )}
+                      </span>
+                    </div>
                   </div>
-                )}
+                  <CheckCircle className="w-5 h-5 text-emerald-400 flex-shrink-0" />
+                </div>
               </div>
 
             </div>
@@ -653,9 +487,7 @@ export default function CheckoutPage() {
                     ? 'Processing Order...'
                     : isBelowMinOrder && selectedZone
                     ? `Min. Order Rs. ${selectedZone.minimum_order_amount} Required (+Rs. ${minOrderShortage})`
-                    : paymentMethod === 'CASH'
-                    ? 'Confirm Order (Cash on Delivery)'
-                    : `Confirm & Submit Payment (Rs. ${totalAmount})`}
+                    : 'Confirm Order (Cash on Delivery)'}
                 </button>
               </div>
             </div>

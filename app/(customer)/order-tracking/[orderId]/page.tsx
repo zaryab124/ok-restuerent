@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Clock, CheckCircle2, MapPin, Bike, Phone, RefreshCw, Sparkles, ChefHat, CreditCard } from 'lucide-react';
+import { ArrowLeft, Clock, CheckCircle2, MapPin, Bike, Phone, RefreshCw, Sparkles, ChefHat } from 'lucide-react';
 import { Order, OrderStatus } from '@/lib/types';
 import { OrderService } from '@/lib/services/order-service';
 import { OrderStatusBadge } from '@/components/OrderStatusBadge';
@@ -239,32 +239,6 @@ export default function OrderTrackingPage({ params }: { params: { orderId: strin
                   {order.payment_status}
                 </span>
               </div>
-              {order.payment_status === 'PENDING' && order.payment_method !== 'CASH' && (
-                <button
-                  type="button"
-                  onClick={async () => {
-                    try {
-                      const res = await fetch('/api/payments/checkout', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                          orderId: order.id,
-                          customer: { name: order.customer_name, phone: order.customer_phone },
-                        }),
-                      });
-                      const data = await res.json();
-                      if (data.checkoutUrl) {
-                        window.location.href = data.checkoutUrl;
-                      }
-                    } catch (err) {
-                      console.error('Payment checkout failed', err);
-                    }
-                  }}
-                  className="w-full mt-2 py-2 bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-slate-950 font-black rounded-xl text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all shadow-md shadow-emerald-500/20"
-                >
-                  <CreditCard className="w-3.5 h-3.5" /> Complete Payment (Rs. {order.total_amount}) via Safepay
-                </button>
-              )}
             </div>
           </div>
 

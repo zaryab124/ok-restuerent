@@ -4,7 +4,7 @@ import React, { useEffect, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import QRCode from 'qrcode';
-import { Utensils, Calendar, Clock, Users, QrCode, CheckCircle, ArrowLeft, Printer, Sparkles, CreditCard } from 'lucide-react';
+import { Utensils, Calendar, Clock, Users, QrCode, CheckCircle, ArrowLeft, Printer, Sparkles } from 'lucide-react';
 import { BuffetRegistration, BuffetBooking } from '@/lib/types';
 import { BuffetService } from '@/lib/services/buffet-service';
 
@@ -85,32 +85,10 @@ export default function OpenBuffetPage() {
               <p><strong className="text-white">Total Amount:</strong> Rs. {bookingTicket.total_amount}</p>
             </div>
 
-            {bookingTicket.status === 'PENDING' && (
-              <button
-                type="button"
-                onClick={async () => {
-                  try {
-                    const res = await fetch('/api/payments/checkout', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({
-                        bookingId: bookingTicket.id,
-                        customer: { name: bookingTicket.customer_name, phone: bookingTicket.customer_phone },
-                      }),
-                    });
-                    const data = await res.json();
-                    if (data.checkoutUrl) {
-                      window.location.href = data.checkoutUrl;
-                    }
-                  } catch (err) {
-                    console.error('Payment redirect failed', err);
-                  }
-                }}
-                className="w-full py-3 bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-slate-950 font-black rounded-xl text-xs uppercase tracking-wider shadow-lg shadow-emerald-500/20 active:scale-95 transition-all flex items-center justify-center gap-2"
-              >
-                <CreditCard className="w-4 h-4" /> Pay Rs. {bookingTicket.total_amount} with Safepay
-              </button>
-            )}
+            <div className="p-3.5 bg-emerald-500/10 border border-emerald-500/30 rounded-2xl text-xs text-center space-y-1">
+              <span className="font-extrabold text-emerald-400 block">💵 Pay Cash at Counter / Reception</span>
+              <span className="text-slate-400 text-[11px]">Present this digital QR ticket or printed pass at the branch reception upon arrival to complete cash payment.</span>
+            </div>
 
             <div className="flex gap-3">
               <button
