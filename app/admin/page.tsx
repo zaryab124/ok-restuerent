@@ -434,11 +434,12 @@ export default function BranchAdminPortal() {
 
   const activeBranch = branches.find((b) => b.id === selectedBranchId);
 
-  // Statistics
+  // Statistics (Excludes Rejected / Cancelled from Realized Gross Sales)
+  const validOrders = orders.filter((o) => !['REJECTED', 'CANCELLED'].includes(o.status));
   const totalOrders = orders.length;
   const pendingOrders = orders.filter((o) => o.status === 'PENDING').length;
   const preparingOrders = orders.filter((o) => o.status === 'PREPARING').length;
-  const totalSales = orders.reduce((sum, o) => sum + o.total_amount, 0);
+  const totalSales = validOrders.reduce((sum, o) => sum + o.total_amount, 0);
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">

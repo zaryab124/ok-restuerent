@@ -307,33 +307,41 @@ export default function OwnerExecutivePortal() {
   const periodRange = getPeriodDateRange();
 
   // Filter orders by date range
+  // Filter orders by date range
   const filteredOrders = orders.filter((o) => {
     const orderDate = new Date(o.created_at);
     return orderDate >= periodRange.start && orderDate <= periodRange.end;
   });
 
-  // Filtered Financial Metrics
-  const filteredTotalSales = filteredOrders.reduce((sum, o) => sum + o.total_amount, 0);
-  const filteredOrdersCount = filteredOrders.length;
+  // 1. Separate Valid Realized Orders from Rejected / Cancelled Orders
+  const validOrders = filteredOrders.filter((o) => !['REJECTED', 'CANCELLED'].includes(o.status));
+  const rejectedOrders = filteredOrders.filter((o) => ['REJECTED', 'CANCELLED'].includes(o.status));
+
+  const voidedRevenue = rejectedOrders.reduce((sum, o) => sum + o.total_amount, 0);
+  const rejectedOrdersCount = rejectedOrders.length;
+
+  // 2. Realized Financial Metrics (STRICTLY ON VALID REALIZED ORDERS)
+  const filteredTotalSales = validOrders.reduce((sum, o) => sum + o.total_amount, 0);
+  const filteredOrdersCount = validOrders.length;
   const filteredAverageOrderValue = filteredOrdersCount > 0 ? Math.round(filteredTotalSales / filteredOrdersCount) : 0;
 
-  // Order type and payment channel totals
-  const dineInRevenue = filteredOrders.filter(o => o.order_type === 'DINE_IN').reduce((sum, o) => sum + o.total_amount, 0);
-  const takeawayRevenue = filteredOrders.filter(o => o.order_type === 'TAKEAWAY').reduce((sum, o) => sum + o.total_amount, 0);
-  const deliveryRevenue = filteredOrders.filter(o => o.order_type === 'DELIVERY').reduce((sum, o) => sum + o.total_amount, 0);
+  // Order type and payment channel totals (strictly valid orders)
+  const dineInRevenue = validOrders.filter(o => o.order_type === 'DINE_IN').reduce((sum, o) => sum + o.total_amount, 0);
+  const takeawayRevenue = validOrders.filter(o => o.order_type === 'TAKEAWAY').reduce((sum, o) => sum + o.total_amount, 0);
+  const deliveryRevenue = validOrders.filter(o => o.order_type === 'DELIVERY').reduce((sum, o) => sum + o.total_amount, 0);
 
-  const cashRevenue = filteredOrders.filter(o => (o.payment_method || 'CASH') === 'CASH').reduce((sum, o) => sum + o.total_amount, 0);
-  const onlineRevenue = filteredOrders.filter(o => o.payment_method && o.payment_method !== 'CASH').reduce((sum, o) => sum + o.total_amount, 0);
+  const cashRevenue = validOrders.filter(o => (o.payment_method || 'CASH') === 'CASH').reduce((sum, o) => sum + o.total_amount, 0);
+  const onlineRevenue = validOrders.filter(o => o.payment_method && o.payment_method !== 'CASH').reduce((sum, o) => sum + o.total_amount, 0);
 
-  // Revenue by branch for filtered period
+  // Revenue by branch for filtered period (strictly valid orders)
   const branchSales: Record<string, number> = {};
   branches.forEach((b) => {
-    branchSales[b.name] = filteredOrders
+    branchSales[b.name] = validOrders
       .filter((o) => o.branch_id === b.id)
       .reduce((sum, o) => sum + o.total_amount, 0);
   });
 
-  // Calculate 7-Day Weekly Breakdown (Monday -> Sunday)
+  // Calculate 7-Day Weekly Breakdown (Monday -> Sunday) - strictly valid realized orders
   const getWeeklyBreakdown = () => {
     const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
     const currentDay = new Date().getDay();
@@ -349,7 +357,7 @@ export default function OwnerExecutivePortal() {
       const dateKey = d.toISOString().split('T')[0];
       const dateStr = d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
 
-      const dayOrders = filteredOrders.filter(o => {
+      const dayOrders = validOrders.filter(o => {
         const od = new Date(o.created_at);
         return od.getFullYear() === d.getFullYear() && od.getMonth() === d.getMonth() && od.getDate() === d.getDate();
       });
@@ -378,9 +386,9 @@ export default function OwnerExecutivePortal() {
 
   const weeklyBreakdown = getWeeklyBreakdown();
 
-  // Hourly Breakdown (for Today view)
+  // Hourly Breakdown (for Today view) - strictly valid realized orders
   const hourlyBreakdown = Array.from({ length: 24 }, (_, hour) => {
-    const hourOrders = filteredOrders.filter(o => {
+    const hourOrders = validOrders.filter(o => {
       const od = new Date(o.created_at);
       return od.getHours() === hour;
     });
@@ -394,9 +402,9 @@ export default function OwnerExecutivePortal() {
     };
   });
 
-  // Calculate Top Selling Items in Filtered Period
+  // Calculate Top Selling Items in Filtered Period (strictly valid orders)
   const itemCounts: Record<string, { name: string; quantity: number; revenue: number }> = {};
-  filteredOrders.forEach(o => {
+  validOrders.forEach(o => {
     (o.items || []).forEach(item => {
       const key = item.item_name || 'Item';
       if (!itemCounts[key]) {
@@ -430,6 +438,8 @@ export default function OwnerExecutivePortal() {
     deliveryRevenue,
     cashRevenue,
     onlineRevenue,
+    rejectedOrdersCount,
+    voidedRevenue,
     dailyBreakdown: weeklyBreakdown,
     topItems: topSellingItems,
   };
@@ -588,10 +598,32 @@ export default function OwnerExecutivePortal() {
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Home Delivery</span>
             <h3 className="text-2xl font-black text-emerald-400 mt-1">Rs. {deliveryRevenue.toLocaleString()}</h3>
             <span className="text-[10px] text-slate-500 mt-1 block">
-              {filteredOrders.filter(o => o.order_type === 'DELIVERY').length} delivery dispatches
+              {validOrders.filter(o => o.order_type === 'DELIVERY').length} delivery dispatches
             </span>
           </div>
         </div>
+
+        {/* Rejected Orders Accounting Audit Notice */}
+        {rejectedOrdersCount > 0 && (
+          <div className="bg-rose-500/10 border border-rose-500/30 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs shadow-lg">
+            <div className="flex items-center gap-2.5">
+              <span className="w-8 h-8 rounded-xl bg-rose-500/20 text-rose-400 flex items-center justify-center font-bold text-sm">
+                🛡️
+              </span>
+              <div>
+                <span className="font-bold text-white block">
+                  Accounting Audit: {rejectedOrdersCount} Order{rejectedOrdersCount > 1 ? 's were' : ' was'} Rejected / Cancelled (Rs. {voidedRevenue.toLocaleString()} Total Value)
+                </span>
+                <span className="text-slate-400 text-[11px]">
+                  These rejected orders are strictly excluded from gross sales revenue and daily ledger balances (0 PKR Realized).
+                </span>
+              </div>
+            </div>
+            <span className="px-3 py-1.5 bg-rose-500/20 text-rose-300 font-mono font-bold rounded-xl border border-rose-500/30 text-[11px] whitespace-nowrap">
+              Rs. 0 Realized (Voided)
+            </span>
+          </div>
+        )}
 
         {/* Tab Navigation */}
         <div className="flex items-center gap-2 border-b border-slate-800 pb-3 overflow-x-auto scrollbar-none">

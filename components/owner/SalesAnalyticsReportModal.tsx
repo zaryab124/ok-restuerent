@@ -31,6 +31,8 @@ export interface PeriodReportData {
   deliveryRevenue: number;
   cashRevenue: number;
   onlineRevenue: number;
+  rejectedOrdersCount: number;
+  voidedRevenue: number;
   dailyBreakdown: DaySalesSummary[];
   topItems: { name: string; quantity: number; revenue: number }[];
 }
@@ -133,6 +135,18 @@ export function SalesAnalyticsReportModal({ isOpen, onClose, reportData }: Props
               </span>
             </div>
           </div>
+
+          {/* Voided / Rejected Orders Audit Summary Callout */}
+          {reportData.rejectedOrdersCount > 0 && (
+            <div className="p-3 bg-rose-500/10 border border-rose-500/30 print:border-red-400 print:bg-red-50 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-xs">
+              <span className="font-bold text-rose-400 print:text-red-700 flex items-center gap-1.5">
+                <span>🛡️</span> Accounting Audit: {reportData.rejectedOrdersCount} Rejected / Cancelled Order{reportData.rejectedOrdersCount > 1 ? 's' : ''} (Rs. {reportData.voidedRevenue.toLocaleString()} Total Value)
+              </span>
+              <span className="font-black text-rose-400 print:text-red-700 bg-rose-500/20 print:bg-red-100 px-2.5 py-1 rounded-lg">
+                EXCLUDED FROM SALES • 0 PKR REALIZED
+              </span>
+            </div>
+          )}
 
           {/* Service Channel Split */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
