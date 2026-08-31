@@ -26,7 +26,7 @@ export default function KitchenDisplaySystem() {
   useEffect(() => {
     async function initChef() {
       const user = await AuthService.fetchCurrentUser();
-      if (!user || (user.role !== 'KITCHEN' && user.role !== 'OWNER')) {
+      if (!user || user.role !== 'KITCHEN') {
         router.push('/kitchen/login');
         return;
       }

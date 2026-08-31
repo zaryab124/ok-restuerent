@@ -77,7 +77,7 @@ export default function BranchAdminPortal() {
   useEffect(() => {
     async function initAdmin() {
       const user = await AuthService.fetchCurrentUser();
-      if (!user || (user.role !== 'BRANCH_ADMIN' && user.role !== 'OWNER')) {
+      if (!user || user.role !== 'BRANCH_ADMIN') {
         router.push('/admin/login');
         return;
       }
@@ -1470,7 +1470,7 @@ export default function BranchAdminPortal() {
       {/* QR Code Printable Modal */}
       {qrModalData && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fadeIn print:p-0 print:bg-white">
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-sm w-full text-center space-y-4 shadow-2xl print:border-none print:shadow-none print:bg-white print:p-0">
+          <div id="printable-standee" className="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-sm w-full text-center space-y-4 shadow-2xl print:border-none print:shadow-none print:bg-white print:p-0">
             <div className="border-b border-slate-800 pb-3 print:border-black">
               <span className="text-[11px] font-black uppercase tracking-widest text-amber-500 print:text-black">OK RESTAURANT</span>
               <h3 className="text-xl font-black text-white print:text-black mt-1">Table {qrModalData.tableNumber}</h3>

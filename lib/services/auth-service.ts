@@ -185,7 +185,7 @@ export class AuthService {
     const effectivePhone = staffConfig?.phone || authUser?.user_metadata?.phone || '';
     const resolvedUserId = authUser?.id || staffConfig?.id || '00000000-0000-0000-0000-000000000000';
 
-    if (expectedRole && effectiveRole !== expectedRole && effectiveRole !== 'OWNER') {
+    if (expectedRole && effectiveRole !== expectedRole) {
       if (authUser) await supabase.auth.signOut().catch(() => {});
       throw new Error(`Unauthorized access. This login portal is restricted to ${expectedRole} users.`);
     }

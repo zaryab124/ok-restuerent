@@ -22,7 +22,7 @@ export default function RiderPortal() {
   useEffect(() => {
     async function initRider() {
       const user = await AuthService.fetchCurrentUser();
-      if (!user || (user.role !== 'RIDER' && user.role !== 'OWNER')) {
+      if (!user || user.role !== 'RIDER') {
         router.push('/rider/login');
         return;
       }

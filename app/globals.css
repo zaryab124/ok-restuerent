@@ -42,11 +42,15 @@
     background: white !important;
     color: black !important;
   }
+  
   body * {
     visibility: hidden;
   }
-  #printable-receipt, #printable-receipt * {
-    visibility: visible;
+
+  /* 1. Thermal POS / Dispatch Order Receipts */
+  #printable-receipt,
+  #printable-receipt * {
+    visibility: visible !important;
   }
   #printable-receipt {
     position: absolute;
@@ -60,8 +64,46 @@
     color: black !important;
     box-shadow: none !important;
   }
+
+  /* 2. Executive Owner Sales Audit & Multi-Period Reports (Full Width A4 / Letter) */
+  #printable-report,
+  #printable-report * {
+    visibility: visible !important;
+  }
+  #printable-report {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 16px !important;
+    background: white !important;
+    color: black !important;
+    box-shadow: none !important;
+    display: block !important;
+  }
+
+  /* 3. QR Code Table Standees */
+  #printable-standee,
+  #printable-standee * {
+    visibility: visible !important;
+  }
+  #printable-standee {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    max-width: 450px;
+    margin: 0 auto;
+    padding: 24px;
+    background: white !important;
+    color: black !important;
+    box-shadow: none !important;
+  }
+
   @page {
-    margin: 0.5cm;
+    margin: 0.8cm;
     size: auto;
   }
 }

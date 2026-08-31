@@ -77,7 +77,7 @@ export function SalesAnalyticsReportModal({ isOpen, onClose, reportData }: Props
         </div>
 
         {/* Printable Document Content */}
-        <div className="p-8 space-y-8 text-slate-100 print:text-black print:p-4 print:space-y-6">
+        <div id="printable-report" className="p-8 space-y-8 text-slate-100 print:text-black print:p-4 print:space-y-6">
           
           {/* Header */}
           <div className="border-b border-slate-800 pb-6 print:border-black flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">

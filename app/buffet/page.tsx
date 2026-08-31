@@ -64,7 +64,7 @@ export default function OpenBuffetPage() {
         
         {/* Ticket Modal if Booked */}
         {bookingTicket && qrCodeDataUrl ? (
-          <div className="max-w-md mx-auto bg-slate-900 border border-slate-800 rounded-3xl p-6 text-center space-y-6 shadow-2xl animate-fadeIn">
+          <div id="printable-receipt" className="max-w-md mx-auto bg-slate-900 border border-slate-800 rounded-3xl p-6 text-center space-y-6 shadow-2xl animate-fadeIn">
             <CheckCircle className="w-12 h-12 text-emerald-400 mx-auto animate-bounce" />
             
             <div>
