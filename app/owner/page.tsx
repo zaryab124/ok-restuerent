@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ShieldCheck, TrendingUp, DollarSign, ShoppingBag, MapPin, Users, ToggleLeft, ToggleRight, PieChart, BarChart3, CreditCard, Landmark, Smartphone, Check, Save, LogOut, Utensils, Edit3, Trash2, Bike } from 'lucide-react';
+import { ShieldCheck, TrendingUp, DollarSign, ShoppingBag, MapPin, Users, ToggleLeft, ToggleRight, PieChart, BarChart3, CreditCard, Landmark, Smartphone, Check, Save, LogOut, Utensils, Edit3, Trash2, Bike, Calendar, Printer, Clock, FileText } from 'lucide-react';
 import { Branch, Order, Profile, MenuItem, DeliveryZone } from '@/lib/types';
 import { BranchService } from '@/lib/services/branch-service';
 import { OrderService } from '@/lib/services/order-service';
@@ -11,6 +11,7 @@ import { DeliveryZoneService } from '@/lib/services/delivery-zone-service';
 import { MerchantConfigService, MerchantBankConfig } from '@/lib/services/merchant-config-service';
 import { AuthService, AuthenticatedUser } from '@/lib/services/auth-service';
 import { supabase } from '@/lib/supabase/client';
+import { SalesAnalyticsReportModal } from '@/components/owner/SalesAnalyticsReportModal';
 
 export default function OwnerExecutivePortal() {
   const router = useRouter();
@@ -234,18 +235,204 @@ export default function OwnerExecutivePortal() {
     }
   };
 
-  // Financial Metrics
-  const totalSales = orders.reduce((sum, o) => sum + o.total_amount, 0);
-  const totalOrdersCount = orders.length;
-  const averageOrderValue = totalOrdersCount > 0 ? Math.round(totalSales / totalOrdersCount) : 0;
+  // Financial Analytics & Periodic Reporting State
+  const [timeRange, setTimeRange] = useState<'today' | 'this_week' | 'last_week' | 'this_month' | '3_months' | '6_months' | '1_year' | 'custom'>('this_week');
+  const [weekOffset, setWeekOffset] = useState<number>(0);
+  const [customStartDate, setCustomStartDate] = useState<string>('');
+  const [customEndDate, setCustomEndDate] = useState<string>('');
+  const [isReportModalOpen, setIsReportModalOpen] = useState(false);
 
-  // Revenue by branch calculation
+  // Helper: Get Start and End Date for current view
+  const getPeriodDateRange = () => {
+    const now = new Date();
+    
+    if (timeRange === 'today') {
+      const start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
+      const end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+      return { start, end, label: 'Today (24 Hours)' };
+    }
+
+    if (timeRange === 'this_week' || timeRange === 'last_week') {
+      const effectiveOffset = timeRange === 'last_week' ? weekOffset - 1 : weekOffset;
+      const currentDay = now.getDay(); // 0 is Sunday, 1 is Monday
+      const distanceToMonday = currentDay === 0 ? -6 : 1 - currentDay;
+      
+      const monday = new Date(now);
+      monday.setDate(now.getDate() + distanceToMonday + (effectiveOffset * 7));
+      monday.setHours(0, 0, 0, 0);
+
+      const sunday = new Date(monday);
+      sunday.setDate(monday.getDate() + 6);
+      sunday.setHours(23, 59, 59, 999);
+
+      const label = `Week of ${monday.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })} – ${sunday.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}`;
+      return { start: monday, end: sunday, label };
+    }
+
+    if (timeRange === 'this_month') {
+      const start = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0);
+      const end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+      return { start, end, label: start.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' }) };
+    }
+
+    if (timeRange === '3_months') {
+      const start = new Date(now.getFullYear(), now.getMonth() - 2, 1, 0, 0, 0);
+      const end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+      return { start, end, label: `Past 3 Months (${start.toLocaleDateString('en-GB', { month: 'short' })} – ${now.toLocaleDateString('en-GB', { month: 'short', year: 'numeric' })})` };
+    }
+
+    if (timeRange === '6_months') {
+      const start = new Date(now.getFullYear(), now.getMonth() - 5, 1, 0, 0, 0);
+      const end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+      return { start, end, label: `Past 6 Months (${start.toLocaleDateString('en-GB', { month: 'short' })} – ${now.toLocaleDateString('en-GB', { month: 'short', year: 'numeric' })})` };
+    }
+
+    if (timeRange === '1_year') {
+      const start = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate(), 0, 0, 0);
+      const end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+      return { start, end, label: `Past 12 Months (Yearly Audit)` };
+    }
+
+    if (timeRange === 'custom' && customStartDate && customEndDate) {
+      const start = new Date(customStartDate + 'T00:00:00');
+      const end = new Date(customEndDate + 'T23:59:59');
+      return { start, end, label: `${customStartDate} to ${customEndDate}` };
+    }
+
+    const start = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0);
+    const end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+    return { start, end, label: 'All Orders' };
+  };
+
+  const periodRange = getPeriodDateRange();
+
+  // Filter orders by date range
+  const filteredOrders = orders.filter((o) => {
+    const orderDate = new Date(o.created_at);
+    return orderDate >= periodRange.start && orderDate <= periodRange.end;
+  });
+
+  // Filtered Financial Metrics
+  const filteredTotalSales = filteredOrders.reduce((sum, o) => sum + o.total_amount, 0);
+  const filteredOrdersCount = filteredOrders.length;
+  const filteredAverageOrderValue = filteredOrdersCount > 0 ? Math.round(filteredTotalSales / filteredOrdersCount) : 0;
+
+  // Order type and payment channel totals
+  const dineInRevenue = filteredOrders.filter(o => o.order_type === 'DINE_IN').reduce((sum, o) => sum + o.total_amount, 0);
+  const takeawayRevenue = filteredOrders.filter(o => o.order_type === 'TAKEAWAY').reduce((sum, o) => sum + o.total_amount, 0);
+  const deliveryRevenue = filteredOrders.filter(o => o.order_type === 'DELIVERY').reduce((sum, o) => sum + o.total_amount, 0);
+
+  const cashRevenue = filteredOrders.filter(o => (o.payment_method || 'CASH') === 'CASH').reduce((sum, o) => sum + o.total_amount, 0);
+  const onlineRevenue = filteredOrders.filter(o => o.payment_method && o.payment_method !== 'CASH').reduce((sum, o) => sum + o.total_amount, 0);
+
+  // Revenue by branch for filtered period
   const branchSales: Record<string, number> = {};
   branches.forEach((b) => {
-    branchSales[b.name] = orders
+    branchSales[b.name] = filteredOrders
       .filter((o) => o.branch_id === b.id)
       .reduce((sum, o) => sum + o.total_amount, 0);
   });
+
+  // Calculate 7-Day Weekly Breakdown (Monday -> Sunday)
+  const getWeeklyBreakdown = () => {
+    const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+    const currentDay = new Date().getDay();
+    const distanceToMonday = currentDay === 0 ? -6 : 1 - currentDay;
+    const baseMonday = new Date();
+    const effectiveOffset = timeRange === 'last_week' ? weekOffset - 1 : weekOffset;
+    baseMonday.setDate(baseMonday.getDate() + distanceToMonday + (effectiveOffset * 7));
+    baseMonday.setHours(0, 0, 0, 0);
+
+    return days.map((dayName, idx) => {
+      const d = new Date(baseMonday);
+      d.setDate(baseMonday.getDate() + idx);
+      const dateKey = d.toISOString().split('T')[0];
+      const dateStr = d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
+
+      const dayOrders = filteredOrders.filter(o => {
+        const od = new Date(o.created_at);
+        return od.getFullYear() === d.getFullYear() && od.getMonth() === d.getMonth() && od.getDate() === d.getDate();
+      });
+
+      const rev = dayOrders.reduce((sum, o) => sum + o.total_amount, 0);
+      const dineIn = dayOrders.filter(o => o.order_type === 'DINE_IN').length;
+      const takeaway = dayOrders.filter(o => o.order_type === 'TAKEAWAY').length;
+      const delivery = dayOrders.filter(o => o.order_type === 'DELIVERY').length;
+      const cash = dayOrders.filter(o => (o.payment_method || 'CASH') === 'CASH').reduce((sum, o) => sum + o.total_amount, 0);
+      const online = dayOrders.filter(o => o.payment_method && o.payment_method !== 'CASH').reduce((sum, o) => sum + o.total_amount, 0);
+
+      return {
+        dayName,
+        dateStr,
+        dateKey,
+        orderCount: dayOrders.length,
+        revenue: rev,
+        dineInCount: dineIn,
+        takeawayCount: takeaway,
+        deliveryCount: delivery,
+        cashRevenue: cash,
+        onlineRevenue: online,
+      };
+    });
+  };
+
+  const weeklyBreakdown = getWeeklyBreakdown();
+
+  // Hourly Breakdown (for Today view)
+  const hourlyBreakdown = Array.from({ length: 24 }, (_, hour) => {
+    const hourOrders = filteredOrders.filter(o => {
+      const od = new Date(o.created_at);
+      return od.getHours() === hour;
+    });
+    const rev = hourOrders.reduce((sum, o) => sum + o.total_amount, 0);
+    const label = hour === 0 ? '12 AM' : hour < 12 ? `${hour} AM` : hour === 12 ? '12 PM' : `${hour - 12} PM`;
+    return {
+      hour,
+      label,
+      orderCount: hourOrders.length,
+      revenue: rev,
+    };
+  });
+
+  // Calculate Top Selling Items in Filtered Period
+  const itemCounts: Record<string, { name: string; quantity: number; revenue: number }> = {};
+  filteredOrders.forEach(o => {
+    (o.items || []).forEach(item => {
+      const key = item.item_name || 'Item';
+      if (!itemCounts[key]) {
+        itemCounts[key] = { name: key, quantity: 0, revenue: 0 };
+      }
+      itemCounts[key].quantity += item.quantity || 1;
+      itemCounts[key].revenue += item.subtotal_price || ((item.unit_price || 0) * (item.quantity || 1));
+    });
+  });
+
+  const topSellingItems = Object.values(itemCounts)
+    .sort((a, b) => b.revenue - a.revenue)
+    .slice(0, 6);
+
+  // Active Branch Label
+  const activeBranchName = selectedBranchId === 'ALL' 
+    ? 'All Branches (Combined Audit)' 
+    : (branches.find(b => b.id === selectedBranchId)?.name || 'OK Restaurant');
+
+  const reportData = {
+    reportTitle: `Official Sales Audit & Financial Statement`,
+    periodLabel: periodRange.label,
+    branchName: activeBranchName,
+    startDate: periodRange.start.toLocaleDateString('en-GB'),
+    endDate: periodRange.end.toLocaleDateString('en-GB'),
+    totalRevenue: filteredTotalSales,
+    totalOrders: filteredOrdersCount,
+    avgOrderValue: filteredAverageOrderValue,
+    dineInRevenue,
+    takeawayRevenue,
+    deliveryRevenue,
+    cashRevenue,
+    onlineRevenue,
+    dailyBreakdown: weeklyBreakdown,
+    topItems: topSellingItems,
+  };
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
@@ -296,42 +483,113 @@ export default function OwnerExecutivePortal() {
       {/* Main Container */}
       <main className="flex-1 max-w-7xl mx-auto w-full p-6 space-y-6">
         
-        {/* KPI Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 relative overflow-hidden shadow-xl">
-            <div className="flex justify-between items-start">
-              <div>
-                <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Gross Total Sales</p>
-                <h3 className="text-3xl font-black text-white mt-1">Rs. {totalSales.toLocaleString()}</h3>
+        {/* Time Horizon Control Bar & Report Export */}
+        <div className="bg-slate-900 border border-slate-800 rounded-3xl p-5 shadow-xl flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs font-black uppercase text-slate-400 tracking-wider mr-1 flex items-center gap-1.5">
+              <Calendar className="w-4 h-4 text-amber-400" /> Time Window:
+            </span>
+
+            {[
+              { key: 'today', label: 'Today (24h)' },
+              { key: 'this_week', label: 'This Week' },
+              { key: 'last_week', label: 'Previous Week' },
+              { key: 'this_month', label: 'Monthly (30 Days)' },
+              { key: '3_months', label: '3 Months' },
+              { key: '6_months', label: '6 Months' },
+              { key: '1_year', label: '1 Year' },
+            ].map((t) => (
+              <button
+                key={t.key}
+                onClick={() => {
+                  setTimeRange(t.key as any);
+                  if (t.key === 'this_week') setWeekOffset(0);
+                  if (t.key === 'last_week') setWeekOffset(0);
+                }}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                  timeRange === t.key
+                    ? 'bg-amber-500 text-slate-950 font-black shadow-md shadow-amber-500/20'
+                    : 'bg-slate-950 text-slate-400 hover:text-white border border-slate-800'
+                }`}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex items-center gap-3 w-full lg:w-auto justify-between lg:justify-end">
+            {(timeRange === 'this_week' || timeRange === 'last_week') && (
+              <div className="flex items-center gap-1.5 bg-slate-950 px-2.5 py-1 rounded-xl border border-slate-800 text-xs">
+                <button
+                  onClick={() => setWeekOffset(prev => prev - 1)}
+                  className="px-2 py-1 hover:text-amber-400 font-bold"
+                  title="Previous Week"
+                >
+                  ◀
+                </button>
+                <span className="font-mono text-[11px] text-slate-300 font-bold px-1">
+                  {periodRange.label}
+                </span>
+                <button
+                  onClick={() => setWeekOffset(prev => prev + 1)}
+                  disabled={weekOffset >= 0}
+                  className={`px-2 py-1 font-bold ${weekOffset >= 0 ? 'text-slate-600 cursor-not-allowed' : 'hover:text-amber-400'}`}
+                  title="Next Week"
+                >
+                  ▶
+                </button>
               </div>
-              <div className="w-12 h-12 rounded-2xl bg-amber-500/10 text-amber-400 flex items-center justify-center">
-                <DollarSign className="w-6 h-6" />
+            )}
+
+            <button
+              onClick={() => setIsReportModalOpen(true)}
+              className="px-4 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 font-black rounded-xl text-xs flex items-center gap-2 transition-all shadow-lg shadow-amber-500/20"
+            >
+              <Printer className="w-4 h-4" /> Export / Print Financial PDF
+            </button>
+          </div>
+        </div>
+
+        {/* Filtered Period KPI Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-5 relative overflow-hidden shadow-xl">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+              {periodRange.label} Revenue
+            </span>
+            <h3 className="text-2xl font-black text-amber-400 mt-1">Rs. {filteredTotalSales.toLocaleString()}</h3>
+            <span className="text-[10px] text-slate-500 mt-1 block">
+              Cash: Rs. {cashRevenue.toLocaleString()} • Online: Rs. {onlineRevenue.toLocaleString()}
+            </span>
+          </div>
+
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-5 relative overflow-hidden shadow-xl">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Orders Recorded</span>
+            <h3 className="text-2xl font-black text-white mt-1">{filteredOrdersCount} Orders</h3>
+            <span className="text-[10px] text-slate-500 mt-1 block">
+              Avg Ticket: Rs. {filteredAverageOrderValue}
+            </span>
+          </div>
+
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-5 relative overflow-hidden shadow-xl">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Channel Split</span>
+            <div className="text-xs text-slate-300 font-semibold space-y-1 mt-1">
+              <div className="flex justify-between">
+                <span>Dine-In:</span>
+                <span className="font-bold text-white">Rs. {dineInRevenue.toLocaleString()}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Takeaway:</span>
+                <span className="font-bold text-white">Rs. {takeawayRevenue.toLocaleString()}</span>
               </div>
             </div>
           </div>
 
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 relative overflow-hidden shadow-xl">
-            <div className="flex justify-between items-start">
-              <div>
-                <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Orders Placed</p>
-                <h3 className="text-3xl font-black text-white mt-1">{totalOrdersCount}</h3>
-              </div>
-              <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center">
-                <ShoppingBag className="w-6 h-6" />
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 relative overflow-hidden shadow-xl">
-            <div className="flex justify-between items-start">
-              <div>
-                <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Average Ticket Size</p>
-                <h3 className="text-3xl font-black text-white mt-1">Rs. {averageOrderValue}</h3>
-              </div>
-              <div className="w-12 h-12 rounded-2xl bg-blue-500/10 text-blue-400 flex items-center justify-center">
-                <TrendingUp className="w-6 h-6" />
-              </div>
-            </div>
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-5 relative overflow-hidden shadow-xl">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Home Delivery</span>
+            <h3 className="text-2xl font-black text-emerald-400 mt-1">Rs. {deliveryRevenue.toLocaleString()}</h3>
+            <span className="text-[10px] text-slate-500 mt-1 block">
+              {filteredOrders.filter(o => o.order_type === 'DELIVERY').length} delivery dispatches
+            </span>
           </div>
         </div>
 
@@ -345,7 +603,7 @@ export default function OwnerExecutivePortal() {
                 : 'bg-slate-900 text-slate-400 hover:text-white'
             }`}
           >
-            Branch Revenue Comparison
+            Sales Ledger & Analytics
           </button>
           <button
             onClick={() => setActiveTab('menu')}
@@ -399,56 +657,175 @@ export default function OwnerExecutivePortal() {
           </button>
         </div>
 
-        {/* TAB 1: Branch Analytics */}
+        {/* TAB 1: Detailed Sales Ledger & Financial Reports */}
         {activeTab === 'analytics' && (
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-            <div className="lg:col-span-8 bg-slate-900 border border-slate-800 rounded-3xl p-6 space-y-4">
-              <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                <BarChart3 className="w-4 h-4 text-amber-400" /> Revenue Breakdown by Physical Branch
-              </h3>
+          <div className="space-y-6">
+            
+            {/* 7-Day Weekly Breakdown Table */}
+            <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-4">
+                <div>
+                  <h3 className="text-base font-black text-white flex items-center gap-2">
+                    <Calendar className="w-5 h-5 text-amber-400" />
+                    Day-by-Day Sales Ledger (All 7 Days)
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Continuous 24-hour recording of daily sales, channels, and orders for {periodRange.label}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setIsReportModalOpen(true)}
+                  className="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-amber-400 font-bold rounded-xl text-xs flex items-center gap-1.5 transition-colors"
+                >
+                  <Printer className="w-4 h-4" /> Print Ledger PDF
+                </button>
+              </div>
 
-              <div className="space-y-4 pt-2">
-                {branches.map((b) => {
-                  const rev = branchSales[b.name] || 0;
-                  const pct = totalSales > 0 ? Math.round((rev / totalSales) * 100) : 0;
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead>
+                    <tr className="bg-slate-950 border-b border-slate-800 text-slate-400 font-bold uppercase text-[10px]">
+                      <th className="py-3 px-4">Day & Date</th>
+                      <th className="py-3 px-3 text-center">Orders</th>
+                      <th className="py-3 px-3 text-center">Dine-In</th>
+                      <th className="py-3 px-3 text-center">Takeaway</th>
+                      <th className="py-3 px-3 text-center">Delivery</th>
+                      <th className="py-3 px-3 text-right">Cash Sales</th>
+                      <th className="py-3 px-3 text-right">Online Sales</th>
+                      <th className="py-3 px-4 text-right">Total Revenue</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/60 font-medium">
+                    {weeklyBreakdown.map((day, idx) => (
+                      <tr key={idx} className="hover:bg-slate-800/30 transition-colors">
+                        <td className="py-3 px-4 font-bold text-white">
+                          <span className="text-amber-400 font-black mr-2">{day.dayName}</span>
+                          <span className="text-slate-500 text-[11px] font-normal font-mono">{day.dateStr}</span>
+                        </td>
+                        <td className="py-3 px-3 text-center font-bold text-white">
+                          <span className={day.orderCount > 0 ? 'text-amber-400 font-black' : 'text-slate-600'}>
+                            {day.orderCount}
+                          </span>
+                        </td>
+                        <td className="py-3 px-3 text-center text-slate-400">{day.dineInCount}</td>
+                        <td className="py-3 px-3 text-center text-slate-400">{day.takeawayCount}</td>
+                        <td className="py-3 px-3 text-center text-slate-400">{day.deliveryCount}</td>
+                        <td className="py-3 px-3 text-right text-slate-300 font-mono">
+                          Rs. {day.cashRevenue.toLocaleString()}
+                        </td>
+                        <td className="py-3 px-3 text-right text-slate-300 font-mono">
+                          Rs. {day.onlineRevenue.toLocaleString()}
+                        </td>
+                        <td className="py-3 px-4 text-right font-black text-amber-400 text-sm font-mono">
+                          Rs. {day.revenue.toLocaleString()}
+                        </td>
+                      </tr>
+                    ))}
+                    <tr className="bg-slate-950 font-black border-t-2 border-slate-700">
+                      <td className="py-3.5 px-4 text-white uppercase tracking-wider">Weekly / Period Aggregate</td>
+                      <td className="py-3.5 px-3 text-center text-amber-400 text-sm">{filteredOrdersCount}</td>
+                      <td className="py-3.5 px-3 text-center text-white">
+                        {weeklyBreakdown.reduce((sum, d) => sum + d.dineInCount, 0)}
+                      </td>
+                      <td className="py-3.5 px-3 text-center text-white">
+                        {weeklyBreakdown.reduce((sum, d) => sum + d.takeawayCount, 0)}
+                      </td>
+                      <td className="py-3.5 px-3 text-center text-white">
+                        {weeklyBreakdown.reduce((sum, d) => sum + d.deliveryCount, 0)}
+                      </td>
+                      <td className="py-3.5 px-3 text-right text-white font-mono">
+                        Rs. {cashRevenue.toLocaleString()}
+                      </td>
+                      <td className="py-3.5 px-3 text-right text-white font-mono">
+                        Rs. {onlineRevenue.toLocaleString()}
+                      </td>
+                      <td className="py-3.5 px-4 text-right text-base text-amber-400 font-mono">
+                        Rs. {filteredTotalSales.toLocaleString()}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
 
-                  return (
-                    <div key={b.id} className="space-y-2">
-                      <div className="flex justify-between text-xs font-bold">
-                        <span className="text-white">{b.name}</span>
-                        <span className="text-amber-400">Rs. {rev} ({pct}%)</span>
+            {/* 24-Hour Hourly Progression (if Today view) or Branch Comparison */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+              
+              {timeRange === 'today' ? (
+                <div className="lg:col-span-8 bg-slate-900 border border-slate-800 rounded-3xl p-6 space-y-4">
+                  <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                    <BarChart3 className="w-4 h-4 text-amber-400" /> Today's 24-Hour Sales Progression
+                  </h3>
+                  <div className="grid grid-cols-6 sm:grid-cols-12 gap-2 pt-2">
+                    {hourlyBreakdown.map((h) => (
+                      <div key={h.hour} className="bg-slate-950 p-2 rounded-xl text-center border border-slate-800/80">
+                        <span className="text-[9px] text-slate-500 font-bold block">{h.label}</span>
+                        <span className={`text-xs font-black block mt-0.5 ${h.revenue > 0 ? 'text-amber-400' : 'text-slate-600'}`}>
+                          {h.orderCount > 0 ? `${h.orderCount} ord` : '-'}
+                        </span>
+                        <span className="text-[10px] text-slate-400 block font-mono">
+                          {h.revenue > 0 ? `Rs.${h.revenue}` : '0'}
+                        </span>
                       </div>
-                      <div className="h-3 w-full bg-slate-950 rounded-full overflow-hidden border border-slate-800">
-                        <div
-                          className="h-full bg-gradient-to-r from-amber-500 to-amber-400 rounded-full transition-all duration-500"
-                          style={{ width: `${pct || 10}%` }}
-                        />
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="lg:col-span-8 bg-slate-900 border border-slate-800 rounded-3xl p-6 space-y-4">
+                  <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                    <BarChart3 className="w-4 h-4 text-amber-400" /> Branch Revenue Breakdown ({periodRange.label})
+                  </h3>
+
+                  <div className="space-y-4 pt-2">
+                    {branches.map((b) => {
+                      const rev = branchSales[b.name] || 0;
+                      const pct = filteredTotalSales > 0 ? Math.round((rev / filteredTotalSales) * 100) : 0;
+
+                      return (
+                        <div key={b.id} className="space-y-2">
+                          <div className="flex justify-between text-xs font-bold">
+                            <span className="text-white">{b.name}</span>
+                            <span className="text-amber-400">Rs. {rev.toLocaleString()} ({pct}%)</span>
+                          </div>
+                          <div className="h-3 w-full bg-slate-950 rounded-full overflow-hidden border border-slate-800">
+                            <div
+                              className="h-full bg-gradient-to-r from-amber-500 to-amber-400 rounded-full transition-all duration-500"
+                              style={{ width: `${pct || 5}%` }}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Best Selling Items */}
+              <div className="lg:col-span-4 bg-slate-900 border border-slate-800 rounded-3xl p-6 space-y-4">
+                <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                  <PieChart className="w-4 h-4 text-emerald-400" /> Top Selling Items ({periodRange.label})
+                </h3>
+                <div className="space-y-2.5 text-xs">
+                  {topSellingItems.length > 0 ? (
+                    topSellingItems.map((item, idx) => (
+                      <div key={idx} className="p-3 rounded-xl bg-slate-950 border border-slate-800/80 flex items-center justify-between">
+                        <div>
+                          <span className="font-bold text-white block">{item.name}</span>
+                          <span className="text-[10px] text-slate-400">{item.quantity} orders</span>
+                        </div>
+                        <span className="text-amber-400 font-black font-mono">Rs. {item.revenue.toLocaleString()}</span>
                       </div>
+                    ))
+                  ) : (
+                    <div className="p-4 rounded-xl bg-slate-950 text-slate-500 text-center text-xs">
+                      No itemized sales recorded for this period yet.
                     </div>
-                  );
-                })}
+                  )}
+                </div>
               </div>
+
             </div>
 
-            <div className="lg:col-span-4 bg-slate-900 border border-slate-800 rounded-3xl p-6 space-y-4">
-              <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                <PieChart className="w-4 h-4 text-emerald-400" /> Best-Selling Menu Items
-              </h3>
-              <div className="space-y-3 text-xs">
-                <div className="p-3 rounded-xl bg-slate-950 flex items-center justify-between">
-                  <span className="font-bold text-white">June Deal! (Rs. 1495)</span>
-                  <span className="text-amber-400 font-black">Top Deal</span>
-                </div>
-                <div className="p-3 rounded-xl bg-slate-950 flex items-center justify-between">
-                  <span className="font-bold text-white">Royal Platter (Rs. 2495)</span>
-                  <span className="text-amber-400 font-black">Top Platter</span>
-                </div>
-                <div className="p-3 rounded-xl bg-slate-950 flex items-center justify-between">
-                  <span className="font-bold text-white">Zinger Burger (Rs. 350)</span>
-                  <span className="text-amber-400 font-black">Top Fast Food</span>
-                </div>
-              </div>
-            </div>
           </div>
         )}
 
@@ -1042,6 +1419,13 @@ export default function OwnerExecutivePortal() {
         )}
 
       </main>
+      
+      {/* Official Financial Sales Audit Report Modal */}
+      <SalesAnalyticsReportModal
+        isOpen={isReportModalOpen}
+        onClose={() => setIsReportModalOpen(false)}
+        reportData={reportData}
+      />
     </div>
   );
 }
